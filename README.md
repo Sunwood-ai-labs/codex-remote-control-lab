@@ -85,6 +85,7 @@ CODEX_WORKDIR=/Users/admin/Prj/some-project npm run phone
 CODEX_MODEL=gpt-5.4 npm run phone
 CODEX_APP_SERVER_SOCK=/Users/admin/.codex/app-server-control/app-server-control.sock npm run phone
 CODEX_APP_SERVER_URL=ws://127.0.0.1:45213 npm run phone
+CODEX_HISTORY_SYNC=0 npm run phone
 PHONE_TOKEN=choose-your-own-token npm run phone
 PHONE_NTFY_TOPIC=your-private-topic npm run phone
 PHONE_PUSHOVER_TOKEN=app-token PHONE_PUSHOVER_USER=user-key npm run phone
@@ -94,12 +95,15 @@ PHONE_NOTIFY_TIMEOUT_MS=5000 npm run phone
 
 `CODEX_APP_SERVER_SOCK` or `CODEX_APP_SERVER_URL` makes the bridge attach to an existing headless app-server instead of starting a new one. For live sync with Codex Desktop, use this with a Desktop Remote Connection that points at the same headless app-server. The normal local conversation view in Codex Desktop uses a private `stdio` app-server, so there is no public external route for a bridge to inject live UI updates into that local view.
 
+History sync is enabled by default. After a web turn completes, the bridge warms the app-server history with `thread/read` and a scan-backed `thread/list`, and `/api/threads` also avoids state-DB-only listing. This helps Codex Desktop discover the updated session after reopening or refreshing the thread. It does not inject live updates into an already-open normal Desktop conversation view. Set `CODEX_HISTORY_SYNC=0` to disable the extra history refresh calls.
+
 Startup notifications are opt-in. `PHONE_NTFY_TOPIC` sends the bridge URLs to an ntfy topic, `PHONE_PUSHOVER_TOKEN` plus `PHONE_PUSHOVER_USER` sends them through Pushover, and `PHONE_DISCORD_WEBHOOK_URL` posts them to Discord. `npm run phone` loads local `.env` values before reading these variables. `PHONE_NTFY_SERVER` defaults to `https://ntfy.sh` and must use HTTPS. The notification body includes the tokenized bridge URL, so use a private/protected topic, account, or channel and keep these values in local environment variables.
 
 The current phone bridge supports:
 
 - Codex Desktop-like browser layout with a left thread sidebar, central conversation, right artifact panel, and bottom composer
 - recent thread listing and direct thread resume
+- default history-sync refresh for Desktop reopen/refresh continuity
 - plugin, model, config/auth, and automation status panels
 - approval and sandbox mode controls for the next turn
 - Markdown rendering in chat and artifact previews

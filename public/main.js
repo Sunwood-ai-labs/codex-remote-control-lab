@@ -940,6 +940,7 @@ async function showStatus() {
     const result = await apiGet("/api/status");
     addPanelRow("UI port", String(result.uiPort));
     addPanelRow("Codex app-server", result.codexUrl);
+    addPanelRow("履歴同期", result.historySyncEnabled ? "有効" : "無効");
     addPanelRow("作業ディレクトリ", result.workdir);
     for (const bridge of result.bridges || []) {
       addPanelRow(bridge.threadId || "thread準備中", `${bridge.clients}端末 / ${bridge.ready ? "ready" : "starting"}`);

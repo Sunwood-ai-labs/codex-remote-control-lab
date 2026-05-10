@@ -7,6 +7,7 @@ const path = require("path");
 const { spawn } = require("child_process");
 const WebSocket = require("ws");
 const { bridgeKeyForRequest, shouldDisposeIdleBridge, shouldPromoteBridgeKey } = require("./bridge-state");
+const { isHistorySyncEnabled, runHistorySync } = require("./history-sync");
 const { bridgeUrls, notifyBridgeUrls } = require("./phone-notify");
 
 const root = path.resolve(__dirname, "..");
@@ -37,6 +38,7 @@ const codexUrl = process.env.CODEX_APP_SERVER_URL || (codexSocketPath ? "ws://co
 const shouldStartCodexServer = !process.env.CODEX_APP_SERVER_URL && !codexSocketPath;
 const workdir = process.env.CODEX_WORKDIR || root;
 const model = process.env.CODEX_MODEL || "gpt-5.4";
+const historySyncEnabled = isHistorySyncEnabled(process.env);
 const tokenPath = path.join(root, ".phone-token");
 const uploadDir = path.join(root, ".uploads");
 const bridges = new Map();
@@ -495,6 +497,7 @@ class SharedBridge {
       if (msg.method === "turn/completed") {
         this.activeTurnId = null;
         this.emit("turn", { status: "completed", turnId: msg.params.turnId });
+        this.syncHistory("turn completed");
         this.startNextQueuedTurn();
         return;
       }
@@ -534,6 +537,22 @@ class SharedBridge {
     const next = this.turnQueue.shift();
     this.emit("status", { text: `キューから送信中（残り${this.turnQueue.length}件）` });
     this.startPrompt(next.text, next.attachments, next.options);
+  }
+
+  syncHistory(reason) {
+    if (!this.threadId || !historySyncEnabled) return;
+    runHistorySync({
+      threadId: this.threadId,
+      workdir,
+      request: appServerRequest,
+      enabled: historySyncEnabled,
+    })
+      .then((result) => {
+        if (!result.skipped) this.emit("status", { text: `履歴同期を更新しました (${reason})` });
+      })
+      .catch((error) => {
+        this.emit("status", { text: `履歴同期に失敗しました: ${error.message}` });
+      });
   }
 
   startPrompt(text, attachments = [], options = {}) {
@@ -623,7 +642,7 @@ async function main() {
           sortKey: "updated_at",
           sortDirection: "desc",
           archived: false,
-          useStateDbOnly: true,
+          useStateDbOnly: false,
         });
         sendJson(res, 200, result);
       } catch (error) {
@@ -678,6 +697,7 @@ async function main() {
         codexUrl,
         codexSocketPath: codexSocketPath || null,
         managedCodexServer: shouldStartCodexServer,
+        historySyncEnabled,
         uiPort,
         codexPort,
         bridges: Array.from(bridges.values()).map((bridge) => ({
@@ -686,6 +706,26 @@ async function main() {
           ready: bridge.ready,
         })),
       });
+      return;
+    }
+    if (url.pathname === "/api/history-sync") {
+      if (!requireToken(url, phoneToken, res)) return;
+      const threadId = url.searchParams.get("thread");
+      if (!threadId) {
+        sendJson(res, 400, { error: "thread is required" });
+        return;
+      }
+      try {
+        const result = await runHistorySync({
+          threadId,
+          workdir,
+          request: appServerRequest,
+          enabled: historySyncEnabled,
+        });
+        sendJson(res, 200, result);
+      } catch (error) {
+        sendJson(res, 500, { error: error.message });
+      }
       return;
     }
     if (url.pathname === "/api/thread") {
