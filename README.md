@@ -92,6 +92,7 @@ The current phone bridge supports:
 - sending prompts from the phone
 - streaming assistant text back to the phone
 - showing command/file-change approval requests with approve/decline buttons
+- scrolling long resumed threads inside the conversation pane while keeping the composer visible
 
 Open the same printed URL from both the Mac/PC browser and the phone to see the same shared bridge thread. To resume a known existing thread directly, add `thread=<thread_id>`:
 
