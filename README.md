@@ -119,33 +119,42 @@ Desktop-like layout:
 
 ![Desktop-like UI desktop screenshot](docs/assets/desktop-like-ui-desktop.png)
 
-Mobile layout:
-
-![Desktop-like UI mobile screenshot](docs/assets/desktop-like-ui-mobile.png)
-
 Compact chat typography with image-link preview:
 
 ![Compact chat font with image preview screenshot](docs/assets/chat-font-image-preview.png)
 
-Mobile responsive chat check:
+Mobile flow:
 
-![Mobile responsive chat screenshot](docs/assets/mobile-responsive-chat.png)
-
-Mobile responsive drawer check:
-
-![Mobile responsive drawer screenshot](docs/assets/mobile-responsive-drawer.png)
-
-Theme selector on mobile:
-
-![Cyberpunk theme settings screenshot](docs/assets/theme-cyberpunk-mobile-settings.png)
-
-Codex Desktop-like mobile composer controls:
-
-![Mobile desktop-like controls screenshot](docs/assets/mobile-desktop-like-controls.png)
-
-Model and intelligence menu on mobile:
-
-![Mobile model menu screenshot](docs/assets/mobile-model-menu.png)
+<table>
+  <tr>
+    <td align="center" width="33%">
+      <img src="docs/assets/desktop-like-ui-mobile.png" alt="Desktop-like UI mobile screenshot" width="220"><br>
+      <sub>Mobile layout</sub>
+    </td>
+    <td align="center" width="33%">
+      <img src="docs/assets/mobile-responsive-chat.png" alt="Mobile responsive chat screenshot" width="220"><br>
+      <sub>Responsive chat</sub>
+    </td>
+    <td align="center" width="33%">
+      <img src="docs/assets/mobile-responsive-drawer.png" alt="Mobile responsive drawer screenshot" width="220"><br>
+      <sub>Thread drawer</sub>
+    </td>
+  </tr>
+  <tr>
+    <td align="center" width="33%">
+      <img src="docs/assets/theme-cyberpunk-mobile-settings.png" alt="Cyberpunk theme settings screenshot" width="220"><br>
+      <sub>Theme settings</sub>
+    </td>
+    <td align="center" width="33%">
+      <img src="docs/assets/mobile-desktop-like-controls.png" alt="Mobile desktop-like controls screenshot" width="220"><br>
+      <sub>Composer controls</sub>
+    </td>
+    <td align="center" width="33%">
+      <img src="docs/assets/mobile-model-menu.png" alt="Mobile model menu screenshot" width="220"><br>
+      <sub>Model menu</sub>
+    </td>
+  </tr>
+</table>
 
 More screenshots are available in `docs/assets/` and through the artifact panel in the bridge UI.
 
