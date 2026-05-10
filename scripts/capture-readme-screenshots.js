@@ -39,12 +39,38 @@ const artifacts = [
   { name: "desktop-like-ui-desktop.png", path: "docs/assets/desktop-like-ui-desktop.png", kind: "image" },
 ];
 
+function isInsideDir(base, target) {
+  const relative = path.relative(path.resolve(base), path.resolve(target));
+  return relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative));
+}
+
+function realpathIfExists(file) {
+  try {
+    return fs.realpathSync.native(file);
+  } catch (error) {
+    if (error.code === "ENOENT") return null;
+    throw error;
+  }
+}
+
+function resolveInsideDir(base, target) {
+  const resolvedBase = path.resolve(base);
+  const resolvedTarget = path.resolve(target);
+  if (!isInsideDir(resolvedBase, resolvedTarget)) return null;
+
+  const realBase = fs.realpathSync.native(resolvedBase);
+  const realTarget = realpathIfExists(resolvedTarget);
+  if (realTarget && !isInsideDir(realBase, realTarget)) return null;
+
+  return resolvedTarget;
+}
+
 function startServer() {
   const server = http.createServer((req, res) => {
     const url = new URL(req.url, "http://127.0.0.1");
     const pathname = url.pathname === "/" ? "/index.html" : url.pathname;
-    const file = path.resolve(publicDir, `.${pathname}`);
-    if (!file.startsWith(publicDir)) return res.writeHead(403).end("Forbidden");
+    const file = resolveInsideDir(publicDir, path.resolve(publicDir, `.${pathname}`));
+    if (!file) return res.writeHead(403).end("Forbidden");
     fs.readFile(file, (error, data) => {
       if (error) return res.writeHead(404).end("Not found");
       res.writeHead(200, { "content-type": mime.get(path.extname(file)) || "application/octet-stream" });
@@ -106,8 +132,8 @@ async function mockApi(page, origin) {
       });
     }
     if (url.pathname === "/api/file/raw") {
-      const requested = path.resolve(root, url.searchParams.get("path") || "");
-      if (requested.startsWith(root) && fs.existsSync(requested)) {
+      const requested = resolveInsideDir(root, path.resolve(root, url.searchParams.get("path") || ""));
+      if (requested && fs.existsSync(requested)) {
         return route.fulfill({ path: requested, contentType: mime.get(path.extname(requested)) || "application/octet-stream" });
       }
     }
@@ -173,8 +199,9 @@ async function setTheme(page, theme) {
 async function run() {
   fs.mkdirSync(assetsDir, { recursive: true });
   const { server, origin } = await startServer();
-  const browser = await chromium.launch();
+  let browser;
   try {
+    browser = await chromium.launch();
     let page = await newPage(browser, origin, { width: 1440, height: 900 });
     await setTheme(page, "simple");
     await snap(page, "desktop-like-ui-desktop.png");
@@ -193,7 +220,11 @@ async function run() {
 
     page = await newPage(browser, origin, { width: 390, height: 844 });
     await snap(page, "desktop-like-ui-mobile.png");
+    await page.locator("#prompt").fill("モバイル画面で README 用のチャット状態を確認しています。");
+    await page.waitForTimeout(200);
     await snap(page, "mobile-responsive-chat.png");
+    await page.locator("#prompt").fill("");
+    await page.waitForTimeout(150);
     await page.getByRole("button", { name: "チャット", exact: true }).click();
     await page.waitForTimeout(200);
     await snap(page, "mobile-responsive-drawer.png");
@@ -217,12 +248,19 @@ async function run() {
 
     console.log("Captured README screenshots in docs/assets");
   } finally {
-    await browser.close();
+    if (browser) await browser.close();
     await new Promise((resolve) => server.close(resolve));
   }
 }
 
-run().catch((error) => {
-  console.error(error);
-  process.exit(1);
-});
+if (require.main === module) {
+  run().catch((error) => {
+    console.error(error);
+    process.exit(1);
+  });
+}
+
+module.exports = {
+  isInsideDir,
+  resolveInsideDir,
+};

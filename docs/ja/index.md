@@ -25,6 +25,10 @@ features:
     details: token、upload、Codex home、log、session database は Git に入れない前提で整理しています。
 ---
 
+<p align="center">
+  <img src="../assets/codex-remote-control-lab-header.png" alt="Codex Remote Control Lab" style="width:100%;height:auto;">
+</p>
+
 ## Quick Start
 
 ```bash

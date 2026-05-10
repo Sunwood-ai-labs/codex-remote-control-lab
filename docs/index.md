@@ -25,6 +25,10 @@ features:
     details: Token files, uploads, local Codex homes, logs, and session databases are ignored and documented as local-only.
 ---
 
+<p align="center">
+  <img src="./assets/codex-remote-control-lab-header.png" alt="Codex Remote Control Lab" style="width:100%;height:auto;">
+</p>
+
 ## Quick Start
 
 ```bash
