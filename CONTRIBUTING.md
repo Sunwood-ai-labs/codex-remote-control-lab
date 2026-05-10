@@ -24,3 +24,4 @@ Open the printed URL from a device on the same LAN. Keep the Codex app-server on
 - Do not commit `.codex-home*`, `.phone-token`, `.uploads/`, logs, or generated session databases.
 - Include a focused verification command in the PR notes.
 - Update `README.md`, `README.ja.md`, or `docs/` when behavior changes.
+- Codex review is requested automatically when a non-draft PR is opened, reopened, marked ready for review, or updated with new commits. The workflow posts one `@codex review` comment per head commit and does not check out or execute PR code.
