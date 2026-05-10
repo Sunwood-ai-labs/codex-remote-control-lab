@@ -1,6 +1,6 @@
 # Codex Remote Control Lab v0.1.0 を公開しました: スマホからデスクトップのCodexを操作して、PCとスマホでセッション同期できる実験場
 
-![スマホでCodex操作、PCとセッション同期。](assets/thumbnail-maki-codex-remote-ja.png)
+![スマホでCodex操作、PCとセッション同期。](https://raw.githubusercontent.com/Sunwood-ai-labs/codex-remote-control-lab/main/tmp/campaign-v0.1.0/assets/thumbnail-maki-codex-remote-ja.png)
 
 Codex Remote Control Lab v0.1.0 を公開しました。OpenAI Codex CLI の `remote-control` / `app-server` を、ローカル優先で安全に試すための実験リポジトリです。
 

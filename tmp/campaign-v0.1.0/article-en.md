@@ -1,6 +1,6 @@
 # Codex Remote Control Lab v0.1.0: control desktop Codex from your phone, with sessions synced across PC and mobile
 
-![Codex from phone, PC and mobile session sync.](assets/thumbnail-maki-codex-remote-en.png)
+![Codex from phone, PC and mobile session sync.](https://raw.githubusercontent.com/Sunwood-ai-labs/codex-remote-control-lab/main/tmp/campaign-v0.1.0/assets/thumbnail-maki-codex-remote-en.png)
 
 Codex Remote Control Lab v0.1.0 is the first public release of a local-first experiment for OpenAI Codex CLI `remote-control` and `app-server` workflows.
 
