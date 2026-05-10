@@ -523,7 +523,7 @@ function addEntry(kind, text, images = []) {
     addStatusGroupItem(text);
     return null;
   }
-  if ((kind === "assistant" || kind === "user") && !String(text || "").trim() && !images.length) return null;
+  if (kind === "user" && !String(text || "").trim() && !images.length) return null;
   statusGroup = null;
   const el = document.createElement("article");
   el.className = `entry ${kind}`;

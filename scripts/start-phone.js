@@ -441,7 +441,7 @@ class SharedBridge {
 
       if (msg.method === "item/completed") {
         const entry = summarizeItem(msg.params.item);
-        if (entry) this.history.push(entry);
+        if (entry && entry.type !== "user") this.history.push(entry);
         const text = summarizeLiveItem(msg.params.item, "completed");
         if (text) this.emit("status", { text });
         this.emit("event", { event: msg });
