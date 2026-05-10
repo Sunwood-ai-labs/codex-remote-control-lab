@@ -44,4 +44,5 @@ PHONE_TOKEN=choose-your-own-token npm run phone
 - repository artifact preview
 - Markdown rendering for chat and artifacts
 - browser image attachments passed to Codex as `localImage` inputs
+- simple, cyberpunk, and botanical color themes from the settings panel
 - LAN sharing for a single bridge-managed thread

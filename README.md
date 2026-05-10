@@ -22,7 +22,7 @@ Codex Remote Control Lab is a local-first experiment for OpenAI Codex CLI `remot
 ## ✨ What It Does
 
 - starts a repository-local Codex CLI `0.130.0` app-server
-- serves a phone-friendly browser UI with thread resume, artifact preview, approvals, model selection, and image attachments
+- serves a phone-friendly browser UI with thread resume, artifact preview, approvals, model selection, image attachments, and selectable color themes
 - shares one bridge-managed Codex thread across a phone and desktop browser
 - keeps `.phone-token`, `.uploads/`, `.codex-home*/`, logs, and session databases out of Git
 - publishes bilingual docs through VitePress and GitHub Pages
@@ -91,6 +91,7 @@ The current phone bridge supports:
 - browser-selected image attachments sent as Codex `localImage` inputs
 - local repository image artifacts served through token-protected file routes
 - collapsed status/tool logs with expandable detail rows
+- simple, cyberpunk, and botanical color themes saved in browser local storage
 
 ## 🖼️ UI Evidence
 
@@ -113,6 +114,10 @@ Mobile responsive chat check:
 Mobile responsive drawer check:
 
 ![Mobile responsive drawer screenshot](docs/assets/mobile-responsive-drawer.png)
+
+Theme selector on mobile:
+
+![Cyberpunk theme settings screenshot](docs/assets/theme-cyberpunk-mobile-settings.png)
 
 More screenshots are available in `docs/assets/` and through the artifact panel in the bridge UI.
 

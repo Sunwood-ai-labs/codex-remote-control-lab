@@ -22,7 +22,7 @@ Codex Remote Control Lab は、OpenAI Codex CLI の `remote-control` / `app-serv
 ## ✨ できること
 
 - repo-local の Codex CLI `0.130.0` app-server を起動
-- スマホ向け browser UI で thread resume、artifact preview、承認、model 選択、画像添付を扱う
+- スマホ向け browser UI で thread resume、artifact preview、承認、model 選択、画像添付、カラーテーマ切替を扱う
 - phone と desktop browser で 1 つの bridge-managed Codex thread を共有
 - `.phone-token`、`.uploads/`、`.codex-home*/`、log、session database を Git に入れない
 - VitePress と GitHub Pages で日英 docs を公開
@@ -91,6 +91,7 @@ PHONE_TOKEN=choose-your-own-token npm run phone
 - browser で選んだ画像を Codex `localImage` input として送信
 - local repository image artifact を token-protected file route から表示
 - status/tool log の折りたたみ表示
+- simple / cyberpunk / botanical のカラーテーマを browser local storage に保存
 
 ## 🖼️ UI Evidence
 
@@ -113,6 +114,10 @@ Mobile responsive chat check:
 Mobile responsive drawer check:
 
 ![Mobile responsive drawer screenshot](docs/assets/mobile-responsive-drawer.png)
+
+Theme selector on mobile:
+
+![Cyberpunk theme settings screenshot](docs/assets/theme-cyberpunk-mobile-settings.png)
 
 追加スクリーンショットは `docs/assets/` と bridge UI の artifact panel から確認できます。
 
