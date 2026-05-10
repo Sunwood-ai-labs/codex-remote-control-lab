@@ -103,6 +103,7 @@ The current phone bridge supports:
 - previewing image artifacts from `docs/assets` in the artifact panel
 - rendering user and assistant chat messages as Markdown previews instead of plain text
 - keeping chat Markdown typography on one compact size scale so lists do not become visually louder than paragraphs
+- grouping recent threads by project directory in the sidebar with relative update times
 - collapsing consecutive status/tool logs into summary rows that can be expanded on demand
 - sending prompts from the phone
 - streaming assistant text back to the phone
@@ -188,6 +189,10 @@ Image preview checks:
 Compact chat typography with image-link preview:
 
 ![Compact chat font with image preview screenshot](docs/assets/chat-font-image-preview.png)
+
+Project-grouped sidebar:
+
+![Project grouped sidebar screenshot](docs/assets/project-grouped-sidebar.png)
 
 ## Observed WebSocket Behavior
 

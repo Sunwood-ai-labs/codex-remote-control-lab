@@ -64,6 +64,25 @@ function titleForThread(thread) {
   return firstLine.length > 54 ? `${firstLine.slice(0, 54)}...` : firstLine;
 }
 
+function projectForThread(thread) {
+  const cwd = String(thread.cwd || "").replace(/\/+$/, "");
+  if (!cwd) return "No project";
+  return cwd.split("/").filter(Boolean).pop() || cwd;
+}
+
+function formatRelativeTime(timestamp) {
+  if (!timestamp) return "";
+  const ms = timestamp < 10_000_000_000 ? timestamp * 1000 : timestamp;
+  const diffSeconds = Math.max(0, Math.floor((Date.now() - ms) / 1000));
+  const hours = Math.floor(diffSeconds / 3600);
+  const days = Math.floor(diffSeconds / 86400);
+  const months = Math.floor(days / 30);
+  if (diffSeconds < 3600) return "今";
+  if (hours < 24) return `${hours}時間`;
+  if (days < 30) return `${days}日`;
+  return `${months || 1}か月`;
+}
+
 function isBlockStart(line) {
   return (
     /^```/.test(line) ||
@@ -349,21 +368,65 @@ function renderHistory(history) {
 function renderThreadList() {
   threadList.replaceChildren();
   const query = threadSearch.value.trim().toLowerCase();
-  const fresh = document.createElement("button");
-  fresh.type = "button";
-  fresh.className = selectedThread ? "thread-item" : "thread-item active";
-  fresh.textContent = "新しい共有thread";
-  fresh.addEventListener("click", () => selectThread(""));
-  threadList.appendChild(fresh);
+  const newProject = document.createElement("button");
+  newProject.type = "button";
+  newProject.className = selectedThread ? "project-heading new-project" : "project-heading new-project active";
+  newProject.innerHTML = '<span class="project-folder"></span><span>New project</span>';
+  newProject.addEventListener("click", () => selectThread(""));
+  threadList.appendChild(newProject);
 
-  for (const thread of threadCache.filter((thread) => titleForThread(thread).toLowerCase().includes(query))) {
-    const item = document.createElement("button");
-    item.type = "button";
-    item.className = thread.id === selectedThread ? "thread-item active" : "thread-item";
-    item.textContent = titleForThread(thread);
-    item.title = titleForThread(thread);
-    item.addEventListener("click", () => selectThread(thread.id));
-    threadList.appendChild(item);
+  const groups = new Map();
+  for (const thread of threadCache) {
+    const project = projectForThread(thread);
+    const title = titleForThread(thread);
+    const matches = !query || project.toLowerCase().includes(query) || title.toLowerCase().includes(query);
+    if (!matches) continue;
+    if (!groups.has(project)) groups.set(project, []);
+    groups.get(project).push(thread);
+  }
+
+  for (const [project, threads] of groups) {
+    const group = document.createElement("section");
+    group.className = "project-group";
+
+    const heading = document.createElement("div");
+    heading.className = "project-heading";
+    const folder = document.createElement("span");
+    folder.className = "project-folder";
+    const name = document.createElement("span");
+    name.textContent = project;
+    heading.append(folder, name);
+    group.appendChild(heading);
+
+    const visibleThreads = threads.slice(0, 6);
+    for (const thread of visibleThreads) {
+      const item = document.createElement("button");
+      item.type = "button";
+      item.className = thread.id === selectedThread ? "thread-item active" : "thread-item";
+      item.title = titleForThread(thread);
+      const title = document.createElement("span");
+      title.className = "thread-title";
+      title.textContent = titleForThread(thread);
+      const time = document.createElement("span");
+      time.className = "thread-time";
+      time.textContent = formatRelativeTime(thread.updatedAt || thread.createdAt);
+      item.append(title, time);
+      item.addEventListener("click", () => selectThread(thread.id));
+      group.appendChild(item);
+    }
+
+    if (threads.length > visibleThreads.length) {
+      const more = document.createElement("div");
+      more.className = "project-more";
+      more.textContent = "もっと表示する";
+      group.appendChild(more);
+    } else if (!visibleThreads.length) {
+      const empty = document.createElement("div");
+      empty.className = "project-empty";
+      empty.textContent = "チャットはありません";
+      group.appendChild(empty);
+    }
+    threadList.appendChild(group);
   }
 }
 

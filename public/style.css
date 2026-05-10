@@ -62,8 +62,7 @@ button {
 }
 
 .nav-command,
-.settings,
-.thread-item {
+.settings {
   width: 100%;
   min-height: 36px;
   border: 0;
@@ -75,9 +74,7 @@ button {
 }
 
 .nav-command:hover,
-.settings:hover,
-.thread-item:hover,
-.thread-item.active {
+.settings:hover {
   background: rgba(0, 0, 0, 0.055);
 }
 
@@ -112,27 +109,109 @@ button {
 }
 
 .thread-list {
-  display: grid;
-  align-content: start;
+  display: block;
   flex: 1 1 auto;
-  gap: 2px;
   min-height: 0;
   overflow: auto;
   padding-right: 2px;
 }
 
+.project-group {
+  margin: 12px 0 18px;
+}
+
+.project-heading {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 34px;
+  border: 0;
+  border-radius: 8px;
+  padding: 0 10px;
+  background: transparent;
+  color: #6a6a65;
+  text-align: left;
+  font-size: 15px;
+}
+
+button.project-heading:hover,
+button.project-heading.active {
+  background: rgba(0, 0, 0, 0.055);
+  color: #2c2c29;
+}
+
+.project-folder {
+  position: relative;
+  display: inline-block;
+  width: 18px;
+  height: 13px;
+  border: 1.7px solid #777772;
+  border-radius: 3px;
+}
+
+.project-folder::before {
+  content: "";
+  position: absolute;
+  left: 1px;
+  top: -5px;
+  width: 8px;
+  height: 5px;
+  border: 1.7px solid #777772;
+  border-bottom: 0;
+  border-radius: 3px 3px 0 0;
+  background: transparent;
+}
+
 .thread-item {
-  display: block;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 34px;
+  border: 0;
+  border-radius: 8px;
+  padding: 0 10px 0 42px;
+  background: transparent;
   font-size: 14px;
   color: #4e4e4a;
+  text-align: left;
+}
+
+.thread-item:hover,
+.thread-item.active {
+  background: rgba(0, 0, 0, 0.055);
 }
 
 .thread-item.active {
   color: #1e1e1c;
   font-weight: 560;
+}
+
+.thread-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.thread-time {
+  color: #8b8b85;
+  font-weight: 400;
+  white-space: nowrap;
+}
+
+.project-empty,
+.project-more {
+  padding: 4px 10px 4px 42px;
+  color: #b2b2ac;
+  font-size: 14px;
+}
+
+.project-more {
+  color: #8d8d87;
 }
 
 .settings {
