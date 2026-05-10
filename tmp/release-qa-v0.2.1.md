@@ -7,7 +7,7 @@
 - compare range: `v0.2.0..v0.2.1`
 - requested outputs: GitHub release body, docs-backed release notes, companion walkthrough article, QA inventory
 - validation commands run: `npm test`, `npm run check`, `npm run docs:build`, `node --check scripts/capture-readme-screenshots.js`, `git diff --check`, `npm run screenshots:readme`, `xmllint --noout docs/public/release-header-v0.2.1.svg`
-- release URLs: pending GitHub release publication; docs URLs expected under `https://sunwood-ai-labs.github.io/codex-remote-control-lab/`
+- release URLs: GitHub release `https://github.com/Sunwood-ai-labs/codex-remote-control-lab/releases/tag/v0.2.1`; docs release notes `https://sunwood-ai-labs.github.io/codex-remote-control-lab/guide/releases/v0.2.1`; walkthrough `https://sunwood-ai-labs.github.io/codex-remote-control-lab/guide/articles/v0.2.1-visual-docs-and-safety`
 
 ## Claim Matrix
 
@@ -47,14 +47,14 @@
 | latest_release_links_updated | pass | VitePress release nav points at v0.2.1 |
 | svg_assets_validated | pass | `xmllint --noout docs/public/release-header-v0.2.1.svg` passed; PowerShell SVG validator unavailable because `pwsh` is not installed |
 | docs_assets_committed_before_tag | not_applicable | This task was requested after `v0.2.1` had already been tagged; docs collateral is being published as a post-tag release-notes pass |
-| docs_deployed_live | blocked | Pending commit to `main` and GitHub Pages deploy |
+| docs_deployed_live | pass | GitHub Pages Deploy Docs run `25630458489` passed; release notes, walkthrough, Japanese notes, and SVG returned HTTP 200 |
 | tag_local_remote | pass | `git ls-remote --tags origin v0.2.1` verified the remote tag |
-| github_release_verified | blocked | Pending `gh release create v0.2.1` and `gh release view` verification |
+| github_release_verified | pass | `gh release create v0.2.1 --title "v0.2.1" --notes-file tmp/release-notes-v0.2.1.md`; `gh release view v0.2.1 --json url,name,tagName,isDraft,isPrerelease,body,publishedAt,targetCommitish` verified the final body |
 | validation_commands_recorded | pass | Release Context lists all commands run for this task |
 | publish_date_verified | not_applicable | Release body omits a hardcoded publish date |
 
 ## Notes
 
-- blockers: live docs deploy and GitHub release publication are pending at the time this QA file is first written.
+- blockers: none.
 - waivers: PowerShell-specific validator scripts could not run because `pwsh`/`powershell` is not installed in this macOS environment.
 - follow-up docs tasks: none currently identified after README, security, phone bridge, release page, and walkthrough sync.
