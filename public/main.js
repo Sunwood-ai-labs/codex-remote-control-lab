@@ -412,11 +412,18 @@ async function showArtifact(path) {
     const result = await apiGet(`/api/file?path=${encodeURIComponent(path)}`);
     artifactList.replaceChildren();
     addPanelRow(result.path, "ローカルファイル");
-    artifactPreview.textContent = result.text;
+    setArtifactPreview(result.path, result.text);
     artifactPreview.classList.remove("hidden");
   } catch (error) {
     showToolError("アーティファクト", error);
   }
+}
+
+function setArtifactPreview(filePath, text) {
+  const isMarkdown = /\.md(?:own)?$/i.test(filePath);
+  artifactPreview.classList.toggle("markdown-preview", isMarkdown);
+  artifactPreview.classList.toggle("plain-preview", !isMarkdown);
+  artifactPreview.innerHTML = isMarkdown ? renderMarkdown(text) : `<pre><code>${escapeHtml(text)}</code></pre>`;
 }
 
 function renderAttachments() {

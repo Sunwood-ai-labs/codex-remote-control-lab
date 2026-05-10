@@ -96,6 +96,7 @@ The current phone bridge supports:
 - listing local Codex automation definitions from `~/.codex/automations`
 - switching approval/sandbox mode for the next turn through `turn/start`
 - previewing repository files in the artifact panel
+- rendering Markdown artifacts, such as `README.md`, as previews in the artifact panel
 - attaching browser-selected images by saving them locally and sending them as `localImage` inputs
 - rendering user and assistant chat messages as Markdown previews instead of plain text
 - sending prompts from the phone
@@ -162,6 +163,10 @@ Markdown preview checks:
 ![Markdown preview chat screenshot](docs/assets/markdown-preview-chat.png)
 
 ![Markdown preview mobile screenshot](docs/assets/markdown-preview-mobile.png)
+
+Artifact Markdown preview:
+
+![Artifact Markdown preview screenshot](docs/assets/artifact-markdown-preview.png)
 
 ## Observed WebSocket Behavior
 

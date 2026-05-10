@@ -594,10 +594,82 @@ textarea::placeholder {
   margin: 12px 0 0;
   border-top: 1px solid var(--line);
   padding-top: 12px;
-  white-space: pre-wrap;
   overflow-wrap: anywhere;
   color: #373733;
-  font: 12px/1.55 ui-monospace, "SFMono-Regular", Menlo, monospace;
+  font-size: 13px;
+  line-height: 1.62;
+}
+
+.artifact-preview p,
+.artifact-preview ul,
+.artifact-preview ol,
+.artifact-preview blockquote,
+.artifact-preview pre {
+  margin: 0 0 12px;
+}
+
+.artifact-preview p:last-child,
+.artifact-preview ul:last-child,
+.artifact-preview ol:last-child,
+.artifact-preview blockquote:last-child,
+.artifact-preview pre:last-child {
+  margin-bottom: 0;
+}
+
+.artifact-preview h2,
+.artifact-preview h3,
+.artifact-preview h4,
+.artifact-preview h5 {
+  margin: 0 0 10px;
+  color: #22221f;
+  font-size: 15px;
+  line-height: 1.35;
+}
+
+.artifact-preview ul,
+.artifact-preview ol {
+  padding-left: 1.35em;
+}
+
+.artifact-preview li {
+  margin: 3px 0;
+}
+
+.artifact-preview code {
+  border-radius: 5px;
+  padding: 0.1em 0.32em;
+  background: #efefec;
+  color: #242421;
+  font-family: ui-monospace, "SFMono-Regular", Menlo, monospace;
+  font-size: 0.9em;
+}
+
+.artifact-preview pre {
+  overflow-x: auto;
+  border-radius: 9px;
+  padding: 10px 12px;
+  background: #efefec;
+  white-space: pre;
+}
+
+.artifact-preview pre code {
+  padding: 0;
+  background: transparent;
+}
+
+.artifact-preview blockquote {
+  border-left: 3px solid #d9d9d4;
+  padding-left: 10px;
+  color: #62625d;
+}
+
+.artifact-preview a {
+  color: #0b65c2;
+  text-decoration: none;
+}
+
+.artifact-preview a:hover {
+  text-decoration: underline;
 }
 
 @media (max-width: 1100px) {
