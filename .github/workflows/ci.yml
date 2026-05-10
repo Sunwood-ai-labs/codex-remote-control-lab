@@ -27,6 +27,9 @@ jobs:
       - name: Check JavaScript syntax
         run: npm run check
 
+      - name: Run tests
+        run: npm test
+
       - name: Check production dependency audit
         run: npm audit --omit=dev
 

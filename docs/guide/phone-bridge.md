@@ -29,14 +29,35 @@ phone browser
 
 The bridge shares a thread across multiple browser clients. Add `thread=<thread_id>` to resume a known Codex thread. This is the PC/mobile sync path: both devices are looking at the same bridge-managed Codex conversation instead of creating separate sessions.
 
+For live sync with Codex Desktop itself, connect OCdex to the same headless app-server that Desktop opens through a Remote Connection. The normal local conversation view in Codex Desktop uses a private `stdio` app-server, so there is no public external route for a bridge to inject live UI updates into that local view.
+
+Example using an existing control socket:
+
+```bash
+CODEX_APP_SERVER_SOCK=/Users/admin/.codex/app-server-control/app-server-control.sock \
+CODEX_WORKDIR=/Users/admin/Prj/demo \
+PHONE_TOKEN=demo-test-token \
+npm run phone
+```
+
+In this mode, OCdex does not start a new app-server. It uses the app-server behind the socket. If Codex Desktop opens the same headless app-server as a Remote Connection, the Desktop remote view and OCdex browser subscribe to the same thread event stream.
+
 ## Useful Environment Variables
 
 ```bash
 PHONE_UI_PORT=45214 npm run phone
 CODEX_WORKDIR=/Users/admin/Prj/some-project npm run phone
 CODEX_MODEL=gpt-5.4 npm run phone
+CODEX_APP_SERVER_SOCK=/Users/admin/.codex/app-server-control/app-server-control.sock npm run phone
+CODEX_APP_SERVER_URL=ws://127.0.0.1:45213 npm run phone
 PHONE_TOKEN=choose-your-own-token npm run phone
+PHONE_NTFY_TOPIC=your-private-topic npm run phone
+PHONE_PUSHOVER_TOKEN=app-token PHONE_PUSHOVER_USER=user-key npm run phone
+PHONE_DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/... npm run phone
+PHONE_NOTIFY_TIMEOUT_MS=5000 npm run phone
 ```
+
+Startup notifications are optional. If `PHONE_NTFY_TOPIC` is set, the bridge posts the ready URLs to that ntfy topic. If `PHONE_PUSHOVER_TOKEN` and `PHONE_PUSHOVER_USER` are set, it sends the same URLs through Pushover. If `PHONE_DISCORD_WEBHOOK_URL` is set, it posts them to Discord. `npm run phone` loads local `.env` values before reading these variables. `PHONE_NTFY_SERVER` defaults to `https://ntfy.sh` and must use HTTPS. Notification requests time out after `PHONE_NOTIFY_TIMEOUT_MS`, which defaults to 5000 ms. The message includes the tokenized bridge URL, so use a private/protected topic, account, or channel and keep notification credentials out of Git.
 
 ## UI Surface
 

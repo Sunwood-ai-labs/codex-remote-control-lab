@@ -1,16 +1,40 @@
 const crypto = require("crypto");
 const fs = require("fs");
 const http = require("http");
+const net = require("net");
 const os = require("os");
 const path = require("path");
 const { spawn } = require("child_process");
 const WebSocket = require("ws");
+const { bridgeKeyForRequest, shouldDisposeIdleBridge, shouldPromoteBridgeKey } = require("./bridge-state");
+const { bridgeUrls, notifyBridgeUrls } = require("./phone-notify");
 
 const root = path.resolve(__dirname, "..");
+
+function loadEnvFile(filePath) {
+  if (!fs.existsSync(filePath)) return;
+  const lines = fs.readFileSync(filePath, "utf8").split(/\r?\n/);
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#")) continue;
+    const match = trimmed.match(/^([A-Za-z_][A-Za-z0-9_]*)=(.*)$/);
+    if (!match || process.env[match[1]] !== undefined) continue;
+    let value = match[2].trim();
+    if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
+      value = value.slice(1, -1);
+    }
+    process.env[match[1]] = value;
+  }
+}
+
+loadEnvFile(path.join(root, ".env"));
+
 const codexBin = path.join(root, "node_modules", ".bin", "codex");
 const uiPort = Number(process.env.PHONE_UI_PORT || 45214);
 const codexPort = Number(process.env.CODEX_APP_SERVER_PORT || 45213);
-const codexUrl = `ws://127.0.0.1:${codexPort}`;
+const codexSocketPath = process.env.CODEX_APP_SERVER_SOCK || "";
+const codexUrl = process.env.CODEX_APP_SERVER_URL || (codexSocketPath ? "ws://codex-app-server/rpc" : `ws://127.0.0.1:${codexPort}`);
+const shouldStartCodexServer = !process.env.CODEX_APP_SERVER_URL && !codexSocketPath;
 const workdir = process.env.CODEX_WORKDIR || root;
 const model = process.env.CODEX_MODEL || "gpt-5.4";
 const tokenPath = path.join(root, ".phone-token");
@@ -70,6 +94,14 @@ function waitForReady() {
   });
 }
 
+function createUpstreamWebSocket() {
+  if (!codexSocketPath) return new WebSocket(codexUrl);
+  return new WebSocket(codexUrl, {
+    perMessageDeflate: false,
+    createConnection: () => net.createConnection(codexSocketPath),
+  });
+}
+
 function startCodexServer() {
   const child = spawn(codexBin, ["app-server", "--listen", codexUrl], {
     cwd: root,
@@ -96,7 +128,7 @@ function appServerRequest(method, params) {
   return new Promise((resolve, reject) => {
     let nextId = 1;
     const pending = new Map();
-    const upstream = new WebSocket(codexUrl);
+    const upstream = createUpstreamWebSocket();
     const timeout = setTimeout(() => {
       upstream.close();
       reject(new Error(`${method} timed out`));
@@ -311,8 +343,9 @@ function historyFromThread(thread) {
 }
 
 class SharedBridge {
-  constructor(requestedThreadId) {
+  constructor(requestedThreadId, bridgeKey) {
     this.requestedThreadId = requestedThreadId;
+    this.bridgeKey = bridgeKey;
     this.clients = new Set();
     this.nextId = 1;
     this.pending = new Map();
@@ -321,7 +354,7 @@ class SharedBridge {
     this.ready = false;
     this.history = [];
     this.turnQueue = [];
-    this.upstream = new WebSocket(codexUrl);
+    this.upstream = createUpstreamWebSocket();
     this.bindUpstream();
   }
 
@@ -333,9 +366,9 @@ class SharedBridge {
     }
     browser.on("close", () => {
       this.clients.delete(browser);
-      if (this.clients.size === 0 && this.ready && this.requestedThreadId) {
+      if (shouldDisposeIdleBridge({ clientCount: this.clients.size, ready: this.ready })) {
         this.upstream.close();
-        bridges.delete(this.requestedThreadId);
+        bridges.delete(this.bridgeKey);
       }
     });
   }
@@ -370,6 +403,16 @@ class SharedBridge {
 
   hasPendingTurnStart() {
     return Array.from(this.pending.values()).includes("turn/start");
+  }
+
+  promoteBridgeKey() {
+    if (!shouldPromoteBridgeKey({ bridgeKey: this.bridgeKey, threadId: this.threadId })) return;
+    const previousKey = this.bridgeKey;
+    if (bridges.has(this.threadId) && bridges.get(this.threadId) !== this) return;
+    if (bridges.get(previousKey) !== this) return;
+    this.bridgeKey = this.threadId;
+    bridges.delete(previousKey);
+    bridges.set(this.bridgeKey, this);
   }
 
   bindUpstream() {
@@ -409,6 +452,7 @@ class SharedBridge {
           return;
         }
         this.threadId = msg.result.thread.id;
+        this.promoteBridgeKey();
         this.ready = true;
         this.history = historyFromThread(msg.result.thread);
         this.emit("ready", this.readyPayload());
@@ -534,14 +578,14 @@ class SharedBridge {
   }
 }
 
-function getBridge(threadId) {
-  const key = threadId || "default";
-  if (!bridges.has(key)) bridges.set(key, new SharedBridge(threadId));
+function getBridge(threadId, connectionId = crypto.randomUUID()) {
+  const key = bridgeKeyForRequest(threadId, connectionId);
+  if (!bridges.has(key)) bridges.set(key, new SharedBridge(threadId, key));
   return bridges.get(key);
 }
 
 function bindBrowser(browser, phoneToken, threadId) {
-  const bridge = getBridge(threadId);
+  const bridge = getBridge(threadId, crypto.randomUUID());
   bridge.addClient(browser);
 
   browser.on("message", (data) => {
@@ -558,13 +602,17 @@ function bindBrowser(browser, phoneToken, threadId) {
 
 async function main() {
   const phoneToken = getToken();
-  const codex = startCodexServer();
-  await waitForReady();
+  const codex = shouldStartCodexServer ? startCodexServer() : null;
+  if (shouldStartCodexServer) {
+    await waitForReady();
+  } else {
+    await appServerRequest("thread/loaded/list", { cursor: null, limit: 1 });
+  }
 
   const server = http.createServer(async (req, res) => {
     const url = new URL(req.url, `http://${req.headers.host}`);
     if (url.pathname === "/api/info") {
-      sendJson(res, 200, { model, workdir, codexUrl, tokenRequired: true });
+      sendJson(res, 200, { model, workdir, codexUrl, codexSocketPath: codexSocketPath || null, managedCodexServer: shouldStartCodexServer, tokenRequired: true });
       return;
     }
     if (url.pathname === "/api/threads") {
@@ -628,6 +676,8 @@ async function main() {
         workdir,
         model,
         codexUrl,
+        codexSocketPath: codexSocketPath || null,
+        managedCodexServer: shouldStartCodexServer,
         uiPort,
         codexPort,
         bridges: Array.from(bridges.values()).map((bridge) => ({
@@ -734,19 +784,28 @@ async function main() {
   });
 
   server.listen(uiPort, "0.0.0.0", () => {
+    const urls = bridgeUrls(lanAddresses(), uiPort, phoneToken);
     console.log("");
     console.log("Codex shared browser bridge is ready.");
-    for (const address of lanAddresses()) {
-      console.log(`  http://${address}:${uiPort}/?token=${phoneToken}`);
-    }
+    for (const url of urls) console.log(`  ${url}`);
     console.log("");
     console.log(`Workdir: ${workdir}`);
     console.log(`Model:   ${model}`);
+    console.log(`Codex:   ${shouldStartCodexServer ? codexUrl : codexSocketPath || codexUrl}`);
     console.log("Open the same URL from PC and phone to share one bridge thread.");
     console.log("Press Ctrl+C to stop.");
+
+    notifyBridgeUrls(urls).then((results) => {
+      for (const result of results) {
+        if (result.ok) console.log(`[notify] sent via ${result.type}`);
+        else console.warn(`[notify] ${result.type} failed: ${result.error}`);
+      }
+    });
   });
 
-  process.on("exit", () => codex.kill("SIGINT"));
+  process.on("exit", () => {
+    if (codex) codex.kill("SIGINT");
+  });
 }
 
 main().catch((error) => {

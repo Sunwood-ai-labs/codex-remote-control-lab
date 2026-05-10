@@ -705,6 +705,15 @@ function updateUrlThread() {
   history.replaceState(null, "", next);
 }
 
+function syncReadyThread(threadId) {
+  if (!threadId || selectedThread === threadId) return;
+  selectedThread = threadId;
+  updateUrlThread();
+  const selected = threadCache.find((thread) => thread.id === selectedThread);
+  threadTitle.textContent = selected ? titleForThread(selected) : selectedThread;
+  renderThreadList();
+}
+
 function selectThread(threadId) {
   selectedThread = threadId;
   updateUrlThread();
@@ -1051,6 +1060,7 @@ function connect() {
     const msg = JSON.parse(event.data);
     if (msg.type === "ready") {
       setReady(true);
+      syncReadyThread(msg.threadId);
       renderHistoryIfChanged(msg.history || []);
       meta.textContent = `${msg.model}  •  ${msg.clients}端末  •  ${msg.workdir}`;
       addEntry("status", `共有Codex thread ready: ${msg.threadId}`);

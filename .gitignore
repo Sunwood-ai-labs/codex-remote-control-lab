@@ -4,5 +4,6 @@ schemas/
 docs/.vitepress/dist/
 docs/.vitepress/cache/
 *.log
+.env
 .phone-token
 .uploads/

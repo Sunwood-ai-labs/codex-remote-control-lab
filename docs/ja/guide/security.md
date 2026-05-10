@@ -8,6 +8,7 @@
 - LAN に出る server は phone bridge だけです。
 - page、API、WebSocket bridge request は同じ token を要求します。
 - `.phone-token`、`.uploads/`、`.codex-home*/`、log、session database は Git に入れません。
+- 起動通知の credential と token 付き URL の通知先は、private/protected な account、topic、channel に限定してください。
 
 ## 避けること
 

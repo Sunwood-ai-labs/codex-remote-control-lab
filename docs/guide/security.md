@@ -8,6 +8,7 @@ This project is intentionally local-first.
 - The phone bridge is the only LAN-facing server.
 - Page, API, and WebSocket bridge requests require the same token.
 - `.phone-token`, `.uploads/`, `.codex-home*/`, logs, and session databases stay out of Git.
+- Startup notification credentials and tokenized URL messages should stay in private/protected notification accounts, topics, or channels.
 
 ## Do Not Do This
 

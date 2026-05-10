@@ -83,8 +83,18 @@ Useful environment variables:
 PHONE_UI_PORT=45214 npm run phone
 CODEX_WORKDIR=/Users/admin/Prj/some-project npm run phone
 CODEX_MODEL=gpt-5.4 npm run phone
+CODEX_APP_SERVER_SOCK=/Users/admin/.codex/app-server-control/app-server-control.sock npm run phone
+CODEX_APP_SERVER_URL=ws://127.0.0.1:45213 npm run phone
 PHONE_TOKEN=choose-your-own-token npm run phone
+PHONE_NTFY_TOPIC=your-private-topic npm run phone
+PHONE_PUSHOVER_TOKEN=app-token PHONE_PUSHOVER_USER=user-key npm run phone
+PHONE_DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/... npm run phone
+PHONE_NOTIFY_TIMEOUT_MS=5000 npm run phone
 ```
+
+`CODEX_APP_SERVER_SOCK` or `CODEX_APP_SERVER_URL` makes the bridge attach to an existing headless app-server instead of starting a new one. For live sync with Codex Desktop, use this with a Desktop Remote Connection that points at the same headless app-server. The normal local conversation view in Codex Desktop uses a private `stdio` app-server, so there is no public external route for a bridge to inject live UI updates into that local view.
+
+Startup notifications are opt-in. `PHONE_NTFY_TOPIC` sends the bridge URLs to an ntfy topic, `PHONE_PUSHOVER_TOKEN` plus `PHONE_PUSHOVER_USER` sends them through Pushover, and `PHONE_DISCORD_WEBHOOK_URL` posts them to Discord. `npm run phone` loads local `.env` values before reading these variables. `PHONE_NTFY_SERVER` defaults to `https://ntfy.sh` and must use HTTPS. The notification body includes the tokenized bridge URL, so use a private/protected topic, account, or channel and keep these values in local environment variables.
 
 The current phone bridge supports:
 
