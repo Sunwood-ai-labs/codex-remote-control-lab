@@ -21,7 +21,7 @@ export default defineConfig({
       themeConfig: {
         nav: [
           { text: "Guide", link: "/guide/phone-bridge" },
-          { text: "Releases", link: "/guide/releases/v0.2.0" },
+          { text: "Releases", link: "/guide/releases/v0.2.1" },
           { text: "Safety", link: "/guide/security" },
           { text: "GitHub", link: "https://github.com/Sunwood-ai-labs/codex-remote-control-lab" },
         ],
@@ -32,6 +32,8 @@ export default defineConfig({
               { text: "Phone Bridge", link: "/guide/phone-bridge" },
               { text: "Protocol Notes", link: "/guide/protocol" },
               { text: "Security", link: "/guide/security" },
+              { text: "v0.2.1 Release", link: "/guide/releases/v0.2.1" },
+              { text: "v0.2.1 Walkthrough", link: "/guide/articles/v0.2.1-visual-docs-and-safety" },
               { text: "v0.2.0 Release", link: "/guide/releases/v0.2.0" },
               { text: "v0.2.0 Walkthrough", link: "/guide/articles/v0.2.0-phone-bridge" },
             ],
@@ -46,7 +48,7 @@ export default defineConfig({
       themeConfig: {
         nav: [
           { text: "ガイド", link: "/ja/guide/phone-bridge" },
-          { text: "リリース", link: "/ja/guide/releases/v0.2.0" },
+          { text: "リリース", link: "/ja/guide/releases/v0.2.1" },
           { text: "安全設計", link: "/ja/guide/security" },
           { text: "GitHub", link: "https://github.com/Sunwood-ai-labs/codex-remote-control-lab" },
         ],
@@ -57,6 +59,8 @@ export default defineConfig({
               { text: "Phone Bridge", link: "/ja/guide/phone-bridge" },
               { text: "Protocol Notes", link: "/ja/guide/protocol" },
               { text: "Security", link: "/ja/guide/security" },
+              { text: "v0.2.1 Release", link: "/ja/guide/releases/v0.2.1" },
+              { text: "v0.2.1 Walkthrough", link: "/ja/guide/articles/v0.2.1-visual-docs-and-safety" },
               { text: "v0.2.0 Release", link: "/ja/guide/releases/v0.2.0" },
               { text: "v0.2.0 Walkthrough", link: "/ja/guide/articles/v0.2.0-phone-bridge" },
             ],
