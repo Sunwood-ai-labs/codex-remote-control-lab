@@ -58,6 +58,7 @@ let statusGroup = null;
 let threadCache = [];
 let liveTurnActive = false;
 let lastHistorySignature = "";
+let lastThreadListError = "";
 let lastThreadRefreshError = "";
 let selectedThreadRefreshActive = false;
 let selectedModel = localStorage.getItem("codexPhoneModel") || "";
@@ -684,14 +685,20 @@ async function apiGet(path) {
   return result;
 }
 
-async function loadThreads() {
+async function loadThreads({ background = false } = {}) {
   if (!token) return;
   try {
     const result = await apiGet("/api/threads");
     threadCache = result.data || [];
     renderThreadList();
+    lastThreadListError = "";
   } catch (error) {
-    addEntry("error", `thread一覧を読めませんでした: ${error.message}`);
+    const message = error.message || String(error);
+    if (message !== lastThreadListError) {
+      lastThreadListError = message;
+      addEntry("error", `thread一覧を読めませんでした: ${message}`);
+    }
+    if (!background) throw error;
   }
 }
 
@@ -1273,6 +1280,6 @@ for (const button of artifactButtons) {
 setReady(false);
 updateModelButton();
 loadArtifacts();
-loadThreads().finally(connect);
-setInterval(loadThreads, 10_000);
+loadThreads().catch(() => {}).finally(connect);
+setInterval(() => loadThreads({ background: true }), 10_000);
 setInterval(refreshSelectedThread, 3_000);

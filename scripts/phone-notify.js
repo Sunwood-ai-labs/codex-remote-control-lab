@@ -50,10 +50,11 @@ function notificationTimeoutMs(env = process.env) {
 }
 
 function notificationMessage(urls) {
+  const visibleUrls = urls.length ? urls : ["No LAN URL was detected. Check the bridge console on the host."];
   return [
     "Codex phone bridge is ready.",
     "",
-    ...urls,
+    ...visibleUrls,
     "",
     "Open one of these URLs from a phone on the same Wi-Fi/LAN.",
   ].join("\n");
@@ -78,9 +79,9 @@ function ntfyEndpoint(target) {
 async function postNtfy(target, urls, fetchImpl, timeoutMs) {
   const headers = {
     title: "Codex phone bridge ready",
-    click: urls[0],
     tags: "computer,phone",
   };
+  if (urls[0]) headers.click = urls[0];
   if (target.token) headers.authorization = `Bearer ${target.token}`;
   const response = await fetchWithTimeout(fetchImpl, ntfyEndpoint(target), {
     method: "POST",
@@ -96,9 +97,11 @@ async function postPushover(target, urls, fetchImpl, timeoutMs) {
     user: target.user,
     title: "Codex phone bridge ready",
     message: notificationMessage(urls),
-    url: urls[0],
-    url_title: "Open Codex phone bridge",
   });
+  if (urls[0]) {
+    form.set("url", urls[0]);
+    form.set("url_title", "Open Codex phone bridge");
+  }
   if (target.device) form.set("device", target.device);
   const response = await fetchWithTimeout(fetchImpl, "https://api.pushover.net/1/messages.json", {
     method: "POST",

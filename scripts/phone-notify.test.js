@@ -65,6 +65,32 @@ test("notifyBridgeUrls posts to configured Pushover account", async () => {
   assert.equal(requests[0].options.body.get("device"), "iphone");
 });
 
+test("notifyBridgeUrls omits provider link fields without a LAN URL", async () => {
+  const requests = [];
+  const results = await notifyBridgeUrls([], {
+    env: {
+      PHONE_NTFY_TOPIC: "codex-phone",
+      PHONE_NTFY_SERVER: "https://ntfy.example",
+      PHONE_PUSHOVER_TOKEN: "app",
+      PHONE_PUSHOVER_USER: "user",
+    },
+    fetch: async (url, options) => {
+      requests.push({ url, options });
+      return { ok: true, status: 200 };
+    },
+  });
+
+  assert.deepEqual(results, [
+    { type: "ntfy", ok: true },
+    { type: "pushover", ok: true },
+  ]);
+  assert.equal(requests[0].options.headers.click, undefined);
+  assert.match(requests[0].options.body, /No LAN URL was detected/);
+  assert.equal(requests[1].options.body.has("url"), false);
+  assert.equal(requests[1].options.body.has("url_title"), false);
+  assert.match(requests[1].options.body.get("message"), /No LAN URL was detected/);
+});
+
 test("notifyBridgeUrls posts to configured Discord webhook", async () => {
   const requests = [];
   const results = await notifyBridgeUrls(["http://192.168.11.8:45214/?token=secret"], {
