@@ -443,6 +443,14 @@ body.hide-artifacts .artifact-panel {
   color: var(--button-text);
 }
 
+.entry.user .entry-body {
+  border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--line));
+  border-radius: 16px;
+  padding: 14px 16px;
+  background: color-mix(in srgb, var(--accent) 7%, var(--card));
+  box-shadow: 0 8px 18px color-mix(in srgb, var(--accent) 8%, transparent);
+}
+
 .entry-body {
   min-width: 0;
   overflow-wrap: anywhere;
@@ -762,7 +770,7 @@ textarea {
 }
 
 textarea::placeholder {
-  color: color-mix(in srgb, var(--muted) 58%, transparent);
+  color: color-mix(in srgb, var(--muted) 78%, transparent);
 }
 
 .composer-footer {
@@ -1421,8 +1429,32 @@ textarea::placeholder {
   }
 
   .titlebar {
-    grid-template-columns: auto minmax(0, 1fr) auto;
+    display: flex;
+    align-items: center;
     padding: 0 10px;
+  }
+
+  .title-actions {
+    display: flex;
+    flex: 0 0 auto;
+    gap: 6px;
+  }
+
+  .title-stack {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  .mobile-toggle {
+    flex: 0 0 auto;
+  }
+
+  h1 {
+    font-size: 15px;
+  }
+
+  #meta {
+    max-width: 100%;
   }
 
   .log {
@@ -1443,6 +1475,25 @@ textarea::placeholder {
   .entry-body {
     font-size: 14px;
     line-height: 1.58;
+  }
+
+  .entry.user .entry-body {
+    position: relative;
+    width: min(100%, 88vw);
+    margin-left: auto;
+    border-radius: 18px;
+    padding: 16px 16px 14px;
+  }
+
+  .entry.user .entry-body::before {
+    content: "あなた";
+    display: block;
+    margin-bottom: 6px;
+    color: color-mix(in srgb, var(--accent) 68%, var(--nav-text));
+    font-size: 11px;
+    font-weight: 700;
+    line-height: 1.2;
+    letter-spacing: 0.02em;
   }
 
   .image-gallery {
@@ -1517,6 +1568,7 @@ textarea::placeholder {
     max-height: 112px;
     resize: none;
     padding: 11px 14px 4px;
+    color: var(--text);
     font-size: 15px;
     line-height: 1.42;
   }
@@ -1587,20 +1639,39 @@ textarea::placeholder {
 
 @media (max-width: 520px) {
   .titlebar {
-    gap: 8px;
+    gap: 6px;
+    position: relative;
+    padding-right: 48px;
   }
 
   .mobile-toggle {
-    min-width: 78px;
-    padding: 0 8px;
-  }
-
-  .title-actions {
-    gap: 6px;
+    min-width: 62px;
+    padding: 0 7px;
   }
 
   .icon-button {
-    min-width: 34px;
+    min-width: 32px;
+    height: 32px;
+    border-radius: 9px;
+  }
+
+  h1 {
+    font-size: 13px;
+  }
+
+  #meta {
+    display: none;
+  }
+
+  #connect {
+    display: none;
+  }
+
+  #menuButton {
+    position: absolute;
+    top: 50%;
+    right: 10px;
+    transform: translateY(-50%);
   }
 
   .log {
@@ -1616,6 +1687,10 @@ textarea::placeholder {
     min-height: 40px;
     max-height: 104px;
     padding: 9px 13px 3px;
+  }
+
+  textarea::placeholder {
+    color: color-mix(in srgb, var(--muted) 86%, transparent);
   }
 
   .composer {
@@ -1657,8 +1732,9 @@ textarea::placeholder {
     font-size: 18px;
   }
 
-  .title-actions .icon-button:last-child {
-    display: none;
+  .icon-button {
+    min-width: 30px;
+    height: 30px;
   }
 
   .composer-left,

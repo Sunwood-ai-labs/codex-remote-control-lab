@@ -420,8 +420,15 @@ function renderMarkdown(text, options = {}) {
   return blocks.join("");
 }
 
+function stripUiDirectives(text) {
+  return String(text || "")
+    .replace(/(?:^|\n)::[a-z0-9-]+\{[^\n]*\}(?=\n|$)/gi, "")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
 function setEntryText(body, kind, text) {
-  body.markdownSource = text || "";
+  body.markdownSource = kind === "assistant" ? stripUiDirectives(text) : text || "";
   if (kind === "assistant" || kind === "user") body.innerHTML = renderMarkdown(body.markdownSource);
   else body.textContent = body.markdownSource;
 }
@@ -516,6 +523,7 @@ function addEntry(kind, text, images = []) {
     addStatusGroupItem(text);
     return null;
   }
+  if ((kind === "assistant" || kind === "user") && !String(text || "").trim() && !images.length) return null;
   statusGroup = null;
   const el = document.createElement("article");
   el.className = `entry ${kind}`;

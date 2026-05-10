@@ -247,6 +247,13 @@ function serveStatic(req, res) {
   fs.createReadStream(target).pipe(res);
 }
 
+function stripUiDirectives(text) {
+  return String(text || "")
+    .replace(/(?:^|\n)::[a-z0-9-]+\{[^\n]*\}(?=\n|$)/gi, "")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
 function summarizeItem(item) {
   if (item.type === "userMessage") {
     const textParts = [];
@@ -275,9 +282,20 @@ function summarizeItem(item) {
       attachments,
     };
   }
-  if (item.type === "agentMessage") return { type: "assistant", text: item.text };
+  if (item.type === "agentMessage") return { type: "assistant", text: stripUiDirectives(item.text) };
   if (item.type === "commandExecution") return { type: "status", text: `$ ${item.command}` };
   if (item.type === "fileChange") return { type: "status", text: `file changes: ${item.status}` };
+  return null;
+}
+
+function summarizeLiveItem(item, phase = "completed") {
+  if (!item) return null;
+  if (item.type === "commandExecution") {
+    return phase === "started" ? `$ ${item.command}` : null;
+  }
+  if (item.type === "fileChange") {
+    return `file changes: ${item.status}`;
+  }
   return null;
 }
 
@@ -302,6 +320,7 @@ class SharedBridge {
     this.activeTurnId = null;
     this.ready = false;
     this.history = [];
+    this.turnQueue = [];
     this.upstream = new WebSocket(codexUrl);
     this.bindUpstream();
   }
@@ -347,6 +366,10 @@ class SharedBridge {
     const id = this.nextId++;
     this.upstream.send(JSON.stringify({ id, method, params }));
     return id;
+  }
+
+  hasPendingTurnStart() {
+    return Array.from(this.pending.values()).includes("turn/start");
   }
 
   bindUpstream() {
@@ -395,8 +418,10 @@ class SharedBridge {
 
       if (pendingMethod === "turn/start") {
         this.pending.delete(msg.id);
-        if (msg.error) this.emit("error", { text: msg.error.message || JSON.stringify(msg.error) });
-        else {
+        if (msg.error) {
+          this.emit("error", { text: msg.error.message || JSON.stringify(msg.error) });
+          this.startNextQueuedTurn();
+        } else {
           this.activeTurnId = msg.result.turn.id;
           this.emit("turn", { status: "started", turnId: this.activeTurnId });
         }
@@ -408,9 +433,17 @@ class SharedBridge {
         return;
       }
 
+      if (msg.method === "item/started") {
+        const text = summarizeLiveItem(msg.params.item, "started");
+        if (text) this.emit("status", { text });
+        return;
+      }
+
       if (msg.method === "item/completed") {
         const entry = summarizeItem(msg.params.item);
         if (entry) this.history.push(entry);
+        const text = summarizeLiveItem(msg.params.item, "completed");
+        if (text) this.emit("status", { text });
         this.emit("event", { event: msg });
         return;
       }
@@ -418,6 +451,7 @@ class SharedBridge {
       if (msg.method === "turn/completed") {
         this.activeTurnId = null;
         this.emit("turn", { status: "completed", turnId: msg.params.turnId });
+        this.startNextQueuedTurn();
         return;
       }
 
@@ -443,6 +477,22 @@ class SharedBridge {
       this.emit("error", { text: "Thread is not ready yet" });
       return;
     }
+    if (this.activeTurnId || this.hasPendingTurnStart()) {
+      this.turnQueue.push({ text, attachments, options });
+      this.emit("status", { text: `キューに追加しました（${this.turnQueue.length}件待機）` });
+      return;
+    }
+    this.startPrompt(text, attachments, options);
+  }
+
+  startNextQueuedTurn() {
+    if (!this.ready || this.activeTurnId || this.hasPendingTurnStart() || !this.turnQueue.length) return;
+    const next = this.turnQueue.shift();
+    this.emit("status", { text: `キューから送信中（残り${this.turnQueue.length}件）` });
+    this.startPrompt(next.text, next.attachments, next.options);
+  }
+
+  startPrompt(text, attachments = [], options = {}) {
     const input = [{ type: "text", text, text_elements: [] }];
     const savedImages = [];
     for (const attachment of attachments || []) {
