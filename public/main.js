@@ -12,6 +12,8 @@ const addButton = document.querySelector("#addButton");
 const accessButton = document.querySelector("#accessButton");
 const thinkingButton = document.querySelector("#thinkingButton");
 const modelButton = document.querySelector("#modelButton");
+const modelMenu = document.querySelector("#modelMenu");
+const voiceButton = document.querySelector("#voiceButton");
 const fileInput = document.querySelector("#fileInput");
 const attachments = document.querySelector("#attachments");
 const mobileThreadsButton = document.querySelector("#mobileThreads");
@@ -52,7 +54,9 @@ let pendingApproval = null;
 let assistantEntry = null;
 let statusGroup = null;
 let threadCache = [];
-let selectedModel = "";
+let selectedModel = localStorage.getItem("codexPhoneModel") || "";
+let selectedModelLabel = localStorage.getItem("codexPhoneModelLabel") || "5.5";
+let selectedReasoning = localStorage.getItem("codexPhoneReasoning") || "中";
 let settingsRenderSeq = 0;
 let accessMode = {
   label: "フルアクセス",
@@ -75,6 +79,54 @@ const accessModes = [
   { label: "確認モード", approvalPolicy: "on-request", sandboxMode: "workspace-write" },
   { label: "読み取り専用", approvalPolicy: "on-request", sandboxMode: "read-only" },
 ];
+
+function updateModelButton() {
+  modelButton.textContent = `${selectedModelLabel} ${selectedReasoning}⌄`;
+  for (const row of modelMenu.querySelectorAll("[data-reasoning]")) {
+    const active = row.dataset.reasoning === selectedReasoning;
+    row.classList.toggle("active", active);
+    let mark = row.querySelector(".checkmark");
+    if (active && !mark) {
+      mark = document.createElement("span");
+      mark.className = "checkmark";
+      mark.textContent = "✓";
+      row.appendChild(mark);
+    } else if (!active && mark) {
+      mark.remove();
+    }
+  }
+  for (const row of modelMenu.querySelectorAll("[data-model-choice]")) {
+    row.classList.toggle("active", row.dataset.modelChoice === selectedModel);
+  }
+}
+
+function closeModelMenu() {
+  modelMenu.classList.add("hidden");
+}
+
+function toggleModelMenu() {
+  updateModelButton();
+  modelMenu.classList.toggle("hidden");
+}
+
+function selectReasoning(value) {
+  selectedReasoning = value;
+  localStorage.setItem("codexPhoneReasoning", value);
+  updateModelButton();
+  closeModelMenu();
+  addStatus(`インテリジェンスを ${value} に設定しました。`);
+}
+
+function selectModel(model) {
+  selectedModel = model;
+  selectedModelLabel = model.replace(/^gpt-/, "").toUpperCase().replace(/^GPT-/, "");
+  if (selectedModelLabel.startsWith("5.")) selectedModelLabel = selectedModelLabel;
+  localStorage.setItem("codexPhoneModel", selectedModel);
+  localStorage.setItem("codexPhoneModelLabel", selectedModelLabel);
+  updateModelButton();
+  closeModelMenu();
+  addStatus(`モデルを ${model.toUpperCase()} に設定しました。次の送信から反映します。`);
+}
 
 function titleForThread(thread) {
   const raw = thread.name || thread.preview || thread.cwd || thread.id;
@@ -398,6 +450,7 @@ function renderImageGallery(images = []) {
 }
 
 function summarizeStatus(items) {
+  if (items.some((item) => item.includes("音声入力"))) return "音声入力";
   const reads = items.filter((item) => /^Read\s+/i.test(item)).length;
   const commands = items.filter((item) => /command|コマンド|\$\s/.test(item)).length;
   const files = items.filter((item) => /file|ファイル/i.test(item)).length;
@@ -768,7 +821,10 @@ async function showModels() {
     for (const candidate of models.slice(0, 24)) {
       addPanelRow(candidate.displayName || candidate.model || candidate.id, candidate.defaultReasoningEffort || "", () => {
         selectedModel = candidate.model || candidate.id;
-        modelButton.textContent = `${candidate.displayName || selectedModel}⌄`;
+        selectedModelLabel = (candidate.displayName || selectedModel).replace(/^GPT-/, "").replace(/^gpt-/, "");
+        localStorage.setItem("codexPhoneModel", selectedModel);
+        localStorage.setItem("codexPhoneModelLabel", selectedModelLabel);
+        updateModelButton();
         addStatus(`モデルを ${selectedModel} に設定しました。次の送信から反映します。`);
       });
     }
@@ -776,6 +832,33 @@ async function showModels() {
   } catch (error) {
     showToolError("モデル", error);
   }
+}
+
+function startVoiceInput() {
+  voiceButton.dataset.voiceState = "requested";
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SpeechRecognition) {
+    voiceButton.dataset.voiceState = "unsupported";
+    addStatus("このブラウザでは音声入力APIが使えません。");
+    promptInput.focus();
+    return;
+  }
+  const recognition = new SpeechRecognition();
+  recognition.lang = document.documentElement.lang || "ja-JP";
+  recognition.interimResults = false;
+  recognition.maxAlternatives = 1;
+  voiceButton.classList.add("listening");
+  addStatus("音声入力を開始しました。ブラウザのマイク許可を確認してください。");
+  recognition.addEventListener("result", (event) => {
+    const transcript = event.results?.[0]?.[0]?.transcript || "";
+    if (!transcript) return;
+    promptInput.value = `${promptInput.value}${promptInput.value ? "\n" : ""}${transcript}`;
+    promptInput.focus();
+    addStatus("音声入力をテキストへ追加しました。");
+  });
+  recognition.addEventListener("error", (event) => addStatus(`音声入力に失敗しました: ${event.error || "unknown"}`));
+  recognition.addEventListener("end", () => voiceButton.classList.remove("listening"));
+  recognition.start();
 }
 
 async function showStatus() {
@@ -1005,8 +1088,30 @@ accessButton.addEventListener("click", () => {
   accessButton.textContent = `${accessMode.label}⌄`;
   addStatus(`権限を ${accessMode.label} に切り替えました。次の送信から反映します。`);
 });
-thinkingButton.addEventListener("click", showStatus);
-modelButton.addEventListener("click", showModels);
+thinkingButton.addEventListener("click", toggleModelMenu);
+modelButton.addEventListener("click", toggleModelMenu);
+voiceButton.addEventListener("click", startVoiceInput);
+modelMenu.addEventListener("click", (event) => {
+  const reasoningRow = event.target.closest("[data-reasoning]");
+  if (reasoningRow) {
+    selectReasoning(reasoningRow.dataset.reasoning);
+    return;
+  }
+  const modelRow = event.target.closest("[data-model-choice]");
+  if (modelRow) {
+    selectModel(modelRow.dataset.modelChoice);
+    return;
+  }
+  if (event.target.closest("#moreModelsButton")) {
+    closeModelMenu();
+    showModels();
+  }
+});
+document.addEventListener("click", (event) => {
+  if (modelMenu.classList.contains("hidden")) return;
+  if (modelMenu.contains(event.target) || modelButton.contains(event.target) || thinkingButton.contains(event.target)) return;
+  closeModelMenu();
+});
 statusButton.addEventListener("click", showStatus);
 webSearchButton.addEventListener("click", () => {
   promptInput.value = `${promptInput.value}${promptInput.value ? "\n" : ""}Web調査を使って確認してください。`;
@@ -1020,5 +1125,6 @@ for (const button of artifactButtons) {
 }
 
 setReady(false);
+updateModelButton();
 loadArtifacts();
 loadThreads().finally(connect);

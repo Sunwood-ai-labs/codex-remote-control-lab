@@ -65,10 +65,22 @@
                   <button type="button" class="access-button" id="accessButton">フルアクセス⌄</button>
                 </div>
                 <div class="composer-right">
+                  <button type="button" class="thinking-button" id="thinkingButton" title="インテリジェンス"></button>
                   <button type="button" id="modelButton" class="model-button">5.5 中⌄</button>
-                  <button type="button" class="ghost-button" id="thinkingButton">◌</button>
+                  <button type="button" class="voice-button" id="voiceButton" title="音声入力" aria-label="音声入力"></button>
                   <button id="send" type="submit" class="send-button" title="送信">↑</button>
                 </div>
+              </div>
+              <div id="modelMenu" class="model-menu hidden" role="menu" aria-label="モデルとインテリジェンス">
+                <div class="model-menu-label">インテリジェンス</div>
+                <button type="button" class="model-menu-row" data-reasoning="低">低</button>
+                <button type="button" class="model-menu-row" data-reasoning="中">中<span class="checkmark">✓</span></button>
+                <button type="button" class="model-menu-row" data-reasoning="高">高</button>
+                <button type="button" class="model-menu-row" data-reasoning="非常に高">非常に高</button>
+                <div class="model-menu-separator"></div>
+                <button type="button" class="model-menu-row submenu-row" data-model-choice="gpt-5.5">GPT-5.5<span class="chevron">›</span></button>
+                <button type="button" class="model-menu-row submenu-row" data-model-choice="gpt-5.4">GPT-5.4<span class="chevron">›</span></button>
+                <button type="button" class="model-menu-row submenu-row" id="moreModelsButton">その他のモデル<span class="chevron">›</span></button>
               </div>
             </form>
           </section>

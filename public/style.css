@@ -694,6 +694,7 @@ body.hide-artifacts .artifact-panel {
 }
 
 .composer {
+  position: relative;
   flex: 0 0 auto;
   width: min(860px, calc(100% - 48px));
   min-height: 116px;
@@ -702,7 +703,7 @@ body.hide-artifacts .artifact-panel {
   border-radius: 22px;
   background: var(--composer-bg);
   box-shadow: var(--composer-shadow);
-  overflow: hidden;
+  overflow: visible;
   margin-bottom: max(20px, env(safe-area-inset-bottom));
 }
 
@@ -782,7 +783,9 @@ textarea::placeholder {
 
 .ghost-button,
 .access-button,
-.model-button {
+.model-button,
+.thinking-button,
+.voice-button {
   min-height: 34px;
   border: 0;
   background: transparent;
@@ -799,6 +802,100 @@ textarea::placeholder {
   max-width: 154px;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.thinking-button,
+.voice-button {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 34px;
+  padding: 0;
+}
+
+.thinking-button::before {
+  content: "";
+  width: 18px;
+  height: 18px;
+  border: 3px solid color-mix(in srgb, var(--muted) 42%, transparent);
+  border-top-color: var(--muted);
+  border-radius: 50%;
+}
+
+.voice-button::before {
+  content: "";
+  width: 10px;
+  height: 17px;
+  border: 2px solid var(--muted);
+  border-radius: 999px;
+}
+
+.voice-button::after {
+  content: "";
+  position: absolute;
+  top: 17px;
+  width: 16px;
+  height: 10px;
+  border: 2px solid var(--muted);
+  border-top: 0;
+  border-radius: 0 0 999px 999px;
+}
+
+.voice-button.listening::before,
+.voice-button.listening::after {
+  border-color: var(--accent);
+}
+
+.model-menu {
+  position: absolute;
+  right: 52px;
+  bottom: calc(100% + 12px);
+  z-index: 28;
+  width: min(420px, calc(100vw - 30px));
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  padding: 12px 8px;
+  background: var(--card);
+  color: var(--text);
+  box-shadow: 0 20px 44px color-mix(in srgb, var(--text) 12%, transparent);
+}
+
+.model-menu-label {
+  padding: 4px 16px 12px;
+  color: var(--muted);
+  font-size: 16px;
+}
+
+.model-menu-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  min-height: 42px;
+  border: 0;
+  border-radius: 12px;
+  padding: 0 16px;
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  font-size: 16px;
+}
+
+.model-menu-row:hover,
+.model-menu-row.active {
+  background: var(--soft);
+}
+
+.model-menu-separator {
+  height: 1px;
+  margin: 8px 16px;
+  background: var(--line);
+}
+
+.checkmark,
+.chevron {
+  color: var(--muted);
+  font-size: 22px;
 }
 
 .send-button {
@@ -1364,9 +1461,32 @@ textarea::placeholder {
 
   .ghost-button,
   .access-button,
-  .model-button {
+  .model-button,
+  .thinking-button,
+  .voice-button {
     min-height: 30px;
     font-size: 14px;
+  }
+
+  .thinking-button,
+  .voice-button {
+    width: 30px;
+  }
+
+  .thinking-button::before {
+    width: 17px;
+    height: 17px;
+  }
+
+  .voice-button::before {
+    width: 9px;
+    height: 15px;
+  }
+
+  .voice-button::after {
+    top: 15px;
+    width: 15px;
+    height: 9px;
   }
 
   .send-button {
@@ -1425,6 +1545,11 @@ textarea::placeholder {
     padding-bottom: 7px;
   }
 
+  .model-menu {
+    right: 8px;
+    width: calc(100vw - 30px);
+  }
+
   .image-preview img {
     max-height: 168px;
   }
@@ -1471,7 +1596,9 @@ textarea::placeholder {
 
   .ghost-button,
   .access-button,
-  .model-button {
+  .model-button,
+  .thinking-button,
+  .voice-button {
     font-size: 13px;
   }
 
