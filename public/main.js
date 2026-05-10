@@ -58,6 +58,8 @@ let selectedModel = localStorage.getItem("codexPhoneModel") || "";
 let selectedModelLabel = localStorage.getItem("codexPhoneModelLabel") || "5.5";
 let selectedReasoning = localStorage.getItem("codexPhoneReasoning") || "中";
 let settingsRenderSeq = 0;
+let artifactItems = [];
+let activeArtifactPath = "";
 let accessMode = {
   label: "フルアクセス",
   approvalPolicy: "never",
@@ -81,7 +83,7 @@ const accessModes = [
 ];
 
 function updateModelButton() {
-  modelButton.textContent = `${selectedModelLabel} ${selectedReasoning}⌄`;
+  modelButton.textContent = `${selectedModelLabel} ${selectedReasoning}`;
   for (const row of modelMenu.querySelectorAll("[data-reasoning]")) {
     const active = row.dataset.reasoning === selectedReasoning;
     row.classList.toggle("active", active);
@@ -680,7 +682,9 @@ function closeRightPanel() {
 function clearPanel(title) {
   showRightPanel();
   artifactTitle.textContent = title;
+  artifactList.classList.remove("artifact-browser-list");
   artifactList.replaceChildren();
+  activeArtifactPath = "";
   artifactPreview.classList.add("hidden");
   artifactPreview.textContent = "";
 }
@@ -696,14 +700,29 @@ function addPanelRow(text, detail, onClick) {
 }
 
 function renderArtifactIndex(items) {
+  artifactItems = items;
+  activeArtifactPath = "";
   artifactTitle.textContent = "アーティファクト";
+  artifactList.classList.add("artifact-browser-list");
+  renderArtifactRows();
+  hideArtifactPreview();
+}
+
+function renderArtifactRows() {
   artifactList.replaceChildren();
-  artifactPreview.classList.add("hidden");
-  artifactPreview.textContent = "";
-  for (const item of items) {
+  for (const item of artifactItems) {
     const icon = item.kind === "image" ? "画像" : item.kind === "markdown" ? "MD" : "FILE";
-    addPanelRow(item.name, `${icon} · ${item.path}`, () => showArtifact(item.path));
+    const row = addPanelRow(item.name, `${icon} · ${item.path}`, () => showArtifact(item.path));
+    row.classList.toggle("active", item.path === activeArtifactPath);
   }
+  if (!artifactItems.length) addPanelRow("アーティファクトは見つかりませんでした");
+}
+
+function hideArtifactPreview() {
+  activeArtifactPath = "";
+  renderArtifactRows();
+  artifactPreview.className = "artifact-preview hidden";
+  artifactPreview.textContent = "";
 }
 
 function escapeHtml(value) {
@@ -877,16 +896,32 @@ async function showStatus() {
 }
 
 async function showArtifact(path) {
-  clearPanel("アーティファクト");
-  addPanelRow(path, "読み込み中");
+  showRightPanel();
+  artifactTitle.textContent = "アーティファクト";
+  artifactList.classList.add("artifact-browser-list");
+  activeArtifactPath = path;
+  renderArtifactRows();
+  artifactPreview.className = "artifact-preview";
+  artifactPreview.innerHTML = `
+    <div class="artifact-preview-header">
+      <div class="artifact-preview-title">${escapeHtml(path)}</div>
+      <button type="button" class="artifact-preview-close" data-preview-close>閉じる</button>
+    </div>
+    <p>読み込み中...</p>
+  `;
   try {
     const result = await apiGet(`/api/file?path=${encodeURIComponent(path)}`);
-    artifactList.replaceChildren();
-    addPanelRow(result.path, "ローカルファイル");
     setArtifactPreview(result);
     artifactPreview.classList.remove("hidden");
   } catch (error) {
-    showToolError("アーティファクト", error);
+    artifactPreview.innerHTML = `
+      <div class="artifact-preview-header">
+        <div class="artifact-preview-title">${escapeHtml(path)}</div>
+        <button type="button" class="artifact-preview-close" data-preview-close>閉じる</button>
+      </div>
+      <p>読み込みに失敗しました: ${escapeHtml(error.message)}</p>
+    `;
+    addEntry("error", `アーティファクト: ${error.message}`);
   }
 }
 
@@ -896,15 +931,21 @@ function setArtifactPreview(result) {
   artifactPreview.classList.toggle("image-artifact-preview", isImage);
   artifactPreview.classList.toggle("markdown-preview", isMarkdown);
   artifactPreview.classList.toggle("plain-preview", !isMarkdown && !isImage);
+  const header = `
+    <div class="artifact-preview-header">
+      <div class="artifact-preview-title">${escapeHtml(result.path)}</div>
+      <button type="button" class="artifact-preview-close" data-preview-close>閉じる</button>
+    </div>
+  `;
   if (isImage) {
-    artifactPreview.innerHTML = "";
+    artifactPreview.innerHTML = header;
     const gallery = renderImageGallery([{ name: result.path, url: result.imageUrl }]);
     artifactPreview.appendChild(gallery);
     return;
   }
-  artifactPreview.innerHTML = isMarkdown
-    ? renderMarkdown(result.text, { allowHtml: true, headingOffset: 0 })
-    : `<pre><code>${escapeHtml(result.text)}</code></pre>`;
+  artifactPreview.innerHTML = `${header}${
+    isMarkdown ? renderMarkdown(result.text, { allowHtml: true, headingOffset: 0 }) : `<pre><code>${escapeHtml(result.text)}</code></pre>`
+  }`;
 }
 
 function renderAttachments() {
@@ -1069,6 +1110,9 @@ menuButton.addEventListener("click", () => {
   }
 });
 closePanelButton.addEventListener("click", closeRightPanel);
+artifactPreview.addEventListener("click", (event) => {
+  if (event.target.closest("[data-preview-close]")) hideArtifactPreview();
+});
 addButton.addEventListener("click", () => fileInput.click());
 fileInput.addEventListener("change", async () => {
   const files = Array.from(fileInput.files || []).filter((file) => file.type.startsWith("image/"));
