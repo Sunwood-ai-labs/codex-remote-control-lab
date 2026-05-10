@@ -86,9 +86,19 @@ PHONE_TOKEN=choose-your-own-token npm run phone
 The current phone bridge supports:
 
 - starting a Codex thread
+- sharing the same bridge thread across multiple browsers, such as a PC browser and a phone browser
+- listing recent existing Codex threads from `~/.codex` and resuming one from the browser UI
 - sending prompts from the phone
 - streaming assistant text back to the phone
 - showing command/file-change approval requests with approve/decline buttons
+
+Open the same printed URL from both the Mac/PC browser and the phone to see the same shared bridge thread. To resume a known existing thread directly, add `thread=<thread_id>`:
+
+```text
+http://192.168.11.8:45214/?token=...&thread=019e...
+```
+
+This is not a pixel-for-pixel mirror of the Codex Desktop app. It is a browser client that uses the same Codex app-server protocol and the same default `~/.codex` session store, so existing threads can be listed/resumed and multiple browser clients can share one bridge-managed thread.
 
 The bridge was smoke-tested locally by sending `Reply exactly: PHONE_BRIDGE_OK` through the phone WebSocket path and receiving `PHONE_BRIDGE_OK`.
 

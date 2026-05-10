@@ -14,6 +14,7 @@ const codexUrl = `ws://127.0.0.1:${codexPort}`;
 const workdir = process.env.CODEX_WORKDIR || root;
 const model = process.env.CODEX_MODEL || "gpt-5.4";
 const tokenPath = path.join(root, ".phone-token");
+const bridges = new Map();
 
 function getToken() {
   if (process.env.PHONE_TOKEN) return process.env.PHONE_TOKEN;
@@ -34,6 +35,10 @@ function waitForReady() {
   const url = `http://127.0.0.1:${codexPort}/readyz`;
   return new Promise((resolve, reject) => {
     const started = Date.now();
+    const retry = () => {
+      if (Date.now() - started > 10_000) reject(new Error("Codex app-server did not become ready"));
+      else setTimeout(tick, 250);
+    };
     const tick = () => {
       http
         .get(url, (res) => {
@@ -42,10 +47,6 @@ function waitForReady() {
           else retry();
         })
         .on("error", retry);
-    };
-    const retry = () => {
-      if (Date.now() - started > 10_000) reject(new Error("Codex app-server did not become ready"));
-      else setTimeout(tick, 250);
     };
     tick();
   });
@@ -71,6 +72,46 @@ function startCodexServer() {
     process.exit(0);
   });
   return child;
+}
+
+function appServerRequest(method, params) {
+  return new Promise((resolve, reject) => {
+    let nextId = 1;
+    const pending = new Map();
+    const upstream = new WebSocket(codexUrl);
+    const timeout = setTimeout(() => {
+      upstream.close();
+      reject(new Error(`${method} timed out`));
+    }, 8000);
+
+    const request = (requestMethod, requestParams) => {
+      const id = nextId++;
+      pending.set(id, requestMethod);
+      upstream.send(JSON.stringify({ id, method: requestMethod, params: requestParams }));
+    };
+
+    upstream.on("open", () => {
+      request("initialize", {
+        clientInfo: { name: "codex-phone-bridge", title: "Codex Phone Bridge", version: "0.1.0" },
+      });
+      upstream.send(JSON.stringify({ method: "initialized", params: {} }));
+      request(method, params);
+    });
+
+    upstream.on("message", (data) => {
+      const msg = JSON.parse(data.toString());
+      if (!msg.id || pending.get(msg.id) !== method) return;
+      clearTimeout(timeout);
+      upstream.close();
+      if (msg.error) reject(new Error(msg.error.message || JSON.stringify(msg.error)));
+      else resolve(msg.result);
+    });
+
+    upstream.on("error", (error) => {
+      clearTimeout(timeout);
+      reject(error);
+    });
+  });
 }
 
 function sendJson(res, status, body) {
@@ -99,131 +140,225 @@ function serveStatic(req, res) {
   fs.createReadStream(target).pipe(res);
 }
 
-function createBridge(browser, phoneToken) {
-  let nextId = 1;
-  let threadId = null;
-  let activeTurnId = null;
-  const pending = new Map();
-  const upstream = new WebSocket(codexUrl);
+function summarizeItem(item) {
+  if (item.type === "userMessage") {
+    return {
+      type: "user",
+      text: item.content.map((part) => (part.type === "text" ? part.text : `[${part.type}]`)).join("\n"),
+    };
+  }
+  if (item.type === "agentMessage") return { type: "assistant", text: item.text };
+  if (item.type === "commandExecution") return { type: "status", text: `$ ${item.command}` };
+  if (item.type === "fileChange") return { type: "status", text: `file changes: ${item.status}` };
+  return null;
+}
 
-  const emit = (type, payload = {}) => {
-    if (browser.readyState === WebSocket.OPEN) browser.send(JSON.stringify({ type, ...payload }));
-  };
+function historyFromThread(thread) {
+  const history = [];
+  for (const turn of thread.turns || []) {
+    for (const item of turn.items || []) {
+      const entry = summarizeItem(item);
+      if (entry && entry.text) history.push(entry);
+    }
+  }
+  return history.slice(-80);
+}
 
-  const request = (method, params) => {
-    const id = nextId++;
-    upstream.send(JSON.stringify({ id, method, params }));
-    return id;
-  };
+class SharedBridge {
+  constructor(requestedThreadId) {
+    this.requestedThreadId = requestedThreadId;
+    this.clients = new Set();
+    this.nextId = 1;
+    this.pending = new Map();
+    this.threadId = null;
+    this.activeTurnId = null;
+    this.ready = false;
+    this.history = [];
+    this.upstream = new WebSocket(codexUrl);
+    this.bindUpstream();
+  }
 
-  upstream.on("open", () => {
-    request("initialize", {
-      clientInfo: {
-        name: "codex-phone-bridge",
-        title: "Codex Phone Bridge",
-        version: "0.1.0",
-      },
+  addClient(browser) {
+    this.clients.add(browser);
+    this.emitTo(browser, "status", { text: "共有Codexブリッジに参加しました。" });
+    if (this.ready) {
+      this.emitTo(browser, "ready", this.readyPayload());
+    }
+    browser.on("close", () => {
+      this.clients.delete(browser);
+      if (this.clients.size === 0 && this.ready && this.requestedThreadId) {
+        this.upstream.close();
+        bridges.delete(this.requestedThreadId);
+      }
     });
-    upstream.send(JSON.stringify({ method: "initialized", params: {} }));
-    const id = request("thread/start", {
+  }
+
+  readyPayload() {
+    return {
+      threadId: this.threadId,
       model,
-      cwd: workdir,
-      approvalPolicy: "on-request",
-      sandbox: "workspace-write",
+      workdir,
+      shared: true,
+      clients: this.clients.size,
+      history: this.history,
+    };
+  }
+
+  emit(type, payload = {}) {
+    const body = JSON.stringify({ type, ...payload });
+    for (const client of this.clients) {
+      if (client.readyState === WebSocket.OPEN) client.send(body);
+    }
+  }
+
+  emitTo(client, type, payload = {}) {
+    if (client.readyState === WebSocket.OPEN) client.send(JSON.stringify({ type, ...payload }));
+  }
+
+  request(method, params) {
+    const id = this.nextId++;
+    this.upstream.send(JSON.stringify({ id, method, params }));
+    return id;
+  }
+
+  bindUpstream() {
+    this.upstream.on("open", () => {
+      this.request("initialize", {
+        clientInfo: { name: "codex-phone-bridge", title: "Codex Phone Bridge", version: "0.1.0" },
+      });
+      this.upstream.send(JSON.stringify({ method: "initialized", params: {} }));
+      const method = this.requestedThreadId ? "thread/resume" : "thread/start";
+      const params = this.requestedThreadId
+        ? {
+            threadId: this.requestedThreadId,
+            model,
+            cwd: workdir,
+            approvalPolicy: "on-request",
+            sandbox: "workspace-write",
+          }
+        : {
+            model,
+            cwd: workdir,
+            approvalPolicy: "on-request",
+            sandbox: "workspace-write",
+          };
+      const id = this.request(method, params);
+      this.pending.set(id, method);
+      this.emit("status", { text: this.requestedThreadId ? "既存threadを再開中..." : "新しいthreadを開始中..." });
     });
-    pending.set(id, "thread/start");
-    emit("status", { text: "Codexに接続中..." });
-  });
 
-  upstream.on("message", (data) => {
-    const msg = JSON.parse(data.toString());
+    this.upstream.on("message", (data) => {
+      const msg = JSON.parse(data.toString());
+      const pendingMethod = this.pending.get(msg.id);
 
-    if (msg.id && pending.get(msg.id) === "thread/start") {
-      pending.delete(msg.id);
-      if (msg.error) {
-        emit("error", { text: msg.error.message || JSON.stringify(msg.error) });
+      if (pendingMethod === "thread/start" || pendingMethod === "thread/resume") {
+        this.pending.delete(msg.id);
+        if (msg.error) {
+          this.emit("error", { text: msg.error.message || JSON.stringify(msg.error) });
+          return;
+        }
+        this.threadId = msg.result.thread.id;
+        this.ready = true;
+        this.history = historyFromThread(msg.result.thread);
+        this.emit("ready", this.readyPayload());
+        if (this.requestedThreadId) this.emit("status", { text: `既存threadを再開しました: ${this.threadId}` });
         return;
       }
-      threadId = msg.result.thread.id;
-      emit("ready", { threadId, model, workdir });
-      return;
-    }
 
-    if (msg.id && pending.get(msg.id) === "turn/start") {
-      pending.delete(msg.id);
-      if (msg.error) emit("error", { text: msg.error.message || JSON.stringify(msg.error) });
-      else {
-        activeTurnId = msg.result.turn.id;
-        emit("turn", { status: "started", turnId: activeTurnId });
+      if (pendingMethod === "turn/start") {
+        this.pending.delete(msg.id);
+        if (msg.error) this.emit("error", { text: msg.error.message || JSON.stringify(msg.error) });
+        else {
+          this.activeTurnId = msg.result.turn.id;
+          this.emit("turn", { status: "started", turnId: this.activeTurnId });
+        }
+        return;
       }
+
+      if (msg.method === "item/agentMessage/delta") {
+        this.emit("assistantDelta", { text: msg.params.delta });
+        return;
+      }
+
+      if (msg.method === "item/completed") {
+        const entry = summarizeItem(msg.params.item);
+        if (entry) this.history.push(entry);
+        this.emit("event", { event: msg });
+        return;
+      }
+
+      if (msg.method === "turn/completed") {
+        this.activeTurnId = null;
+        this.emit("turn", { status: "completed", turnId: msg.params.turnId });
+        return;
+      }
+
+      if (msg.method && msg.method.endsWith("/requestApproval")) {
+        this.emit("approval", { request: msg });
+        return;
+      }
+
+      if (msg.method === "error") {
+        this.emit("error", { text: msg.params.message || JSON.stringify(msg.params) });
+        return;
+      }
+
+      this.emit("event", { event: msg });
+    });
+
+    this.upstream.on("error", (error) => this.emit("error", { text: error.message }));
+    this.upstream.on("close", () => this.emit("status", { text: "Codex接続が閉じました" }));
+  }
+
+  prompt(text) {
+    if (!this.threadId) {
+      this.emit("error", { text: "Thread is not ready yet" });
       return;
     }
+    const id = this.request("turn/start", {
+      threadId: this.threadId,
+      input: [{ type: "text", text, text_elements: [] }],
+    });
+    this.pending.set(id, "turn/start");
+    this.history.push({ type: "user", text });
+    this.emit("user", { text });
+  }
 
-    if (msg.method === "item/agentMessage/delta") {
-      emit("assistantDelta", { text: msg.params.delta });
-      return;
+  approval(requestMsg, decision) {
+    if (!requestMsg || !requestMsg.id || !requestMsg.method) return;
+    const accept = decision === "accept";
+    let result;
+    if (requestMsg.method === "item/commandExecution/requestApproval") {
+      result = { decision: accept ? "accept" : "decline" };
+    } else if (requestMsg.method === "item/fileChange/requestApproval") {
+      result = { decision: accept ? "accept" : "decline" };
+    } else {
+      result = accept ? { decision: "accept" } : { decision: "decline" };
     }
+    this.upstream.send(JSON.stringify({ id: requestMsg.id, result }));
+    this.emit("status", { text: accept ? "承認しました" : "拒否しました" });
+  }
+}
 
-    if (msg.method === "turn/completed") {
-      activeTurnId = null;
-      emit("turn", { status: "completed", turnId: msg.params.turnId });
-      return;
-    }
+function getBridge(threadId) {
+  const key = threadId || "default";
+  if (!bridges.has(key)) bridges.set(key, new SharedBridge(threadId));
+  return bridges.get(key);
+}
 
-    if (msg.method && msg.method.endsWith("/requestApproval")) {
-      emit("approval", { request: msg });
-      return;
-    }
-
-    if (msg.method === "error") {
-      emit("error", { text: msg.params.message || JSON.stringify(msg.params) });
-      return;
-    }
-
-    emit("event", { event: msg });
-  });
-
-  upstream.on("error", (error) => emit("error", { text: error.message }));
-  upstream.on("close", () => emit("status", { text: "Codex接続が閉じました" }));
-  browser.on("close", () => upstream.close());
+function bindBrowser(browser, phoneToken, threadId) {
+  const bridge = getBridge(threadId);
+  bridge.addClient(browser);
 
   browser.on("message", (data) => {
     const msg = JSON.parse(data.toString());
     if (msg.token !== phoneToken) {
-      emit("error", { text: "Invalid token" });
+      bridge.emitTo(browser, "error", { text: "Invalid token" });
       browser.close();
       return;
     }
-
-    if (msg.type === "prompt") {
-      if (!threadId) {
-        emit("error", { text: "Thread is not ready yet" });
-        return;
-      }
-      const id = request("turn/start", {
-        threadId,
-        input: [{ type: "text", text: msg.text, text_elements: [] }],
-      });
-      pending.set(id, "turn/start");
-      emit("user", { text: msg.text });
-      return;
-    }
-
-    if (msg.type === "approval") {
-      const requestMsg = msg.request;
-      if (!requestMsg || !requestMsg.id || !requestMsg.method) return;
-      const accept = msg.decision === "accept";
-      let result;
-      if (requestMsg.method === "item/commandExecution/requestApproval") {
-        result = { decision: accept ? "accept" : "decline" };
-      } else if (requestMsg.method === "item/fileChange/requestApproval") {
-        result = { decision: accept ? "accept" : "decline" };
-      } else {
-        result = accept ? { decision: "accept" } : { decision: "decline" };
-      }
-      upstream.send(JSON.stringify({ id: requestMsg.id, result }));
-      emit("status", { text: accept ? "承認しました" : "拒否しました" });
-    }
+    if (msg.type === "prompt") bridge.prompt(msg.text);
+    if (msg.type === "approval") bridge.approval(msg.request, msg.decision);
   });
 }
 
@@ -232,9 +367,29 @@ async function main() {
   const codex = startCodexServer();
   await waitForReady();
 
-  const server = http.createServer((req, res) => {
-    if (req.url.startsWith("/api/info")) {
+  const server = http.createServer(async (req, res) => {
+    const url = new URL(req.url, `http://${req.headers.host}`);
+    if (url.pathname === "/api/info") {
       sendJson(res, 200, { model, workdir, codexUrl, tokenRequired: true });
+      return;
+    }
+    if (url.pathname === "/api/threads") {
+      if (url.searchParams.get("token") !== phoneToken) {
+        sendJson(res, 401, { error: "invalid token" });
+        return;
+      }
+      try {
+        const result = await appServerRequest("thread/list", {
+          limit: 30,
+          sortKey: "updated_at",
+          sortDirection: "desc",
+          archived: false,
+          useStateDbOnly: true,
+        });
+        sendJson(res, 200, result);
+      } catch (error) {
+        sendJson(res, 500, { error: error.message });
+      }
       return;
     }
     serveStatic(req, res);
@@ -252,18 +407,20 @@ async function main() {
       socket.destroy();
       return;
     }
-    wss.handleUpgrade(req, socket, head, (ws) => createBridge(ws, phoneToken));
+    const threadId = url.searchParams.get("thread") || null;
+    wss.handleUpgrade(req, socket, head, (ws) => bindBrowser(ws, phoneToken, threadId));
   });
 
   server.listen(uiPort, "0.0.0.0", () => {
     console.log("");
-    console.log("Codex phone bridge is ready.");
+    console.log("Codex shared browser bridge is ready.");
     for (const address of lanAddresses()) {
       console.log(`  http://${address}:${uiPort}/?token=${phoneToken}`);
     }
     console.log("");
     console.log(`Workdir: ${workdir}`);
     console.log(`Model:   ${model}`);
+    console.log("Open the same URL from PC and phone to share one bridge thread.");
     console.log("Press Ctrl+C to stop.");
   });
 

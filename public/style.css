@@ -15,6 +15,7 @@ body {
 }
 
 button,
+select,
 textarea {
   font: inherit;
 }
@@ -35,6 +36,13 @@ textarea {
   gap: 16px;
   padding: 14px 16px;
   border-bottom: 1px solid #d8d2c2;
+}
+
+.top-actions {
+  display: grid;
+  grid-template-columns: minmax(118px, 220px) auto;
+  gap: 8px;
+  align-items: center;
 }
 
 h1 {
@@ -128,6 +136,16 @@ textarea {
   color: inherit;
 }
 
+select {
+  min-width: 0;
+  height: 42px;
+  border: 1px solid #cfc7b8;
+  border-radius: 8px;
+  padding: 0 8px;
+  background: #fffefa;
+  color: inherit;
+}
+
 button {
   min-width: 72px;
   min-height: 42px;
@@ -155,6 +173,7 @@ button:disabled {
   }
 
   .shell,
+  select,
   textarea {
     background: #181612;
   }
