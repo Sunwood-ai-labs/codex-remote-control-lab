@@ -125,11 +125,11 @@ Theme selector on mobile:
 
 ![Cyberpunk theme settings screenshot](docs/assets/theme-cyberpunk-mobile-settings.png)
 
-Codex Desktop 風の mobile composer controls:
+Codex Desktop-like mobile composer controls:
 
 ![Mobile desktop-like controls screenshot](docs/assets/mobile-desktop-like-controls.png)
 
-Mobile の model / intelligence menu:
+Model and intelligence menu on mobile:
 
 ![Mobile model menu screenshot](docs/assets/mobile-model-menu.png)
 
