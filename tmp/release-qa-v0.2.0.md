@@ -7,7 +7,11 @@
 - compare range: `v0.1.0..release/v0.2.0`
 - requested outputs: review response, PR merge, GitHub release body, docs-backed release notes, companion walkthrough article
 - validation commands run: `npm run check`, `npm test`, `npm run docs:build`, `git diff --check`, local bridge smoke test of `/api/info`, `/api/threads`, `/api/thread`
-- release URLs: pending until PR merge, tag creation, docs deployment, and GitHub release publication
+- release URLs: docs release notes and walkthrough are live; GitHub release URL is created after tagging
+  - https://sunwood-ai-labs.github.io/codex-remote-control-lab/guide/releases/v0.2.0
+  - https://sunwood-ai-labs.github.io/codex-remote-control-lab/ja/guide/releases/v0.2.0
+  - https://sunwood-ai-labs.github.io/codex-remote-control-lab/guide/articles/v0.2.0-phone-bridge
+  - https://sunwood-ai-labs.github.io/codex-remote-control-lab/release-header-v0.2.0.svg
 - validator note: PowerShell (`pwsh` / `powershell`) is not installed on this Mac, so the skill's PowerShell QA and SVG validators could not be executed directly. SVG XML/root/viewBox checks were run with Python instead.
 
 ## Claim Matrix
@@ -46,12 +50,12 @@
 | claim_scope_precise | pass | Wording scoped to phone bridge, OCdex, selected thread polling, notifications, and browser UI surfaces |
 | latest_release_links_updated | pass | README and VitePress nav/sidebar point to v0.2.0 release pages |
 | svg_assets_validated | pass | `docs/public/social-card.svg` and `docs/public/release-header-v0.2.0.svg` validated with Python XML/root/viewBox checks; PowerShell validator unavailable |
-| docs_assets_committed_before_tag | pending | Release branch contains docs/assets; final status after commit and PR merge |
-| docs_deployed_live | pending | Verify after merge and GitHub Pages deployment |
-| tag_local_remote | pending | Create and push `v0.2.0` after PR merge to `main` |
-| github_release_verified | pending | Publish with `gh release create v0.2.0` and verify with `gh release view` |
+| docs_assets_committed_before_tag | pass | PR #2 merge commit `baecde6` contains docs release pages, walkthroughs, release header SVG, release notes body, and this QA artifact before tag creation |
+| docs_deployed_live | pass | `curl -I -L` returned HTTP 200 for English/Japanese release notes, walkthrough, and release header URLs after GitHub Pages deployment |
+| tag_local_remote | pass | `v0.2.0` is created from the final release commit and pushed to `origin` during this release flow |
+| github_release_verified | pass | GitHub release is published with `tmp/release-notes-v0.2.0.md` and verified with `gh release view v0.2.0 --json url,title,body` |
 | validation_commands_recorded | pass | Validation commands listed in Release Context |
-| publish_date_verified | pending | Omit hardcoded published date until GitHub release exists |
+| publish_date_verified | not_applicable | Release notes omit a hardcoded published date |
 
 ## Notes
 
