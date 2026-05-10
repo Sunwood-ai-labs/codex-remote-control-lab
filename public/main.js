@@ -129,13 +129,14 @@ function normalizeImageHref(value) {
   if (/^https?:\/\//i.test(value)) return value;
   const clean = String(value || "").replace(/^\.\//, "");
   if (clean.startsWith("/api/file/raw") || clean.startsWith("/api/uploaded")) return urlWithToken(clean);
-  if (/^[^?#]+\/[^?#]+\.(png|jpe?g|gif|webp|svg)(?:[?#].*)?$/i.test(clean)) {
-    return urlWithToken(`/api/file/raw?path=${encodeURIComponent(clean.replace(/[?#].*$/, ""))}`);
-  }
-  const assetsIndex = clean.indexOf("/docs/assets/");
-  if (assetsIndex >= 0) {
-    const relativeAsset = clean.slice(assetsIndex + 1);
+  const localPath = clean.replace(/[?#].*$/, "");
+  const repoImage = localPath.match(/(?:^|[/\\])(docs[/\\](?:assets|public)[/\\].+\.(?:png|jpe?g|gif|webp|svg))$/i);
+  if (repoImage) {
+    const relativeAsset = repoImage[1].replace(/\\/g, "/");
     return urlWithToken(`/api/file/raw?path=${encodeURIComponent(relativeAsset)}`);
+  }
+  if (/^[^?#]+\/[^?#]+\.(png|jpe?g|gif|webp|svg)(?:[?#].*)?$/i.test(clean)) {
+    return urlWithToken(`/api/file/raw?path=${encodeURIComponent(localPath)}`);
   }
   if (/^[^/\\]+$/.test(clean) && isImageHref(clean)) {
     return urlWithToken(`/api/file/raw?path=${encodeURIComponent(`docs/assets/${clean}`)}`);

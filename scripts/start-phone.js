@@ -147,8 +147,8 @@ function requireToken(url, phoneToken, res) {
 }
 
 function safeRelativePath(input) {
-  const clean = String(input || "").replace(/^[/\\]+/, "");
-  const target = path.resolve(root, clean);
+  const raw = String(input || "");
+  const target = path.isAbsolute(raw) ? path.resolve(raw) : path.resolve(root, raw.replace(/^[/\\]+/, ""));
   if (!target.startsWith(`${root}${path.sep}`) && target !== root) return null;
   return target;
 }
