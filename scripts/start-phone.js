@@ -42,6 +42,7 @@ const historySyncEnabled = isHistorySyncEnabled(process.env);
 const tokenPath = path.join(root, ".phone-token");
 const uploadDir = path.join(root, ".uploads");
 const bridges = new Map();
+const historyLimit = 80;
 const imageExtensions = new Map([
   [".png", "image/png"],
   [".jpg", "image/jpeg"],
@@ -104,6 +105,94 @@ function createUpstreamWebSocket() {
   });
 }
 
+class AppServerRpcClient {
+  constructor() {
+    this.upstream = null;
+    this.nextId = 1;
+    this.pending = new Map();
+    this.ready = false;
+    this.connecting = null;
+  }
+
+  request(method, params) {
+    return this.ensureReady().then(() => this.sendRequest(method, params));
+  }
+
+  ensureReady() {
+    if (this.ready && this.upstream?.readyState === WebSocket.OPEN) return Promise.resolve();
+    if (this.connecting) return this.connecting;
+
+    this.upstream = createUpstreamWebSocket();
+    this.ready = false;
+    this.connecting = new Promise((resolve, reject) => {
+      const fail = (error) => {
+        this.connecting = null;
+        reject(error);
+      };
+
+      this.upstream.on("open", () => {
+        this.sendRequest("initialize", {
+          clientInfo: { name: "codex-phone-bridge-api", title: "Codex Phone Bridge API", version: "0.1.0" },
+        })
+          .then(() => {
+            if (this.upstream?.readyState === WebSocket.OPEN) {
+              this.upstream.send(JSON.stringify({ method: "initialized", params: {} }));
+            }
+            this.ready = true;
+            this.connecting = null;
+            resolve();
+          })
+          .catch(fail);
+      });
+
+      this.upstream.on("message", (data) => this.handleMessage(data));
+      this.upstream.on("error", fail);
+      this.upstream.on("close", () => this.reset(new Error("Codex app-server connection closed")));
+    });
+
+    return this.connecting;
+  }
+
+  sendRequest(method, params) {
+    return new Promise((resolve, reject) => {
+      if (!this.upstream || this.upstream.readyState !== WebSocket.OPEN) {
+        reject(new Error("Codex app-server connection is not open"));
+        return;
+      }
+      const id = this.nextId++;
+      const timeout = setTimeout(() => {
+        this.pending.delete(id);
+        reject(new Error(`${method} timed out`));
+      }, 8000);
+      this.pending.set(id, { method, resolve, reject, timeout });
+      this.upstream.send(JSON.stringify({ id, method, params }));
+    });
+  }
+
+  handleMessage(data) {
+    const msg = JSON.parse(data.toString());
+    if (!msg.id || !this.pending.has(msg.id)) return;
+    const pending = this.pending.get(msg.id);
+    this.pending.delete(msg.id);
+    clearTimeout(pending.timeout);
+    if (msg.error) pending.reject(new Error(msg.error.message || JSON.stringify(msg.error)));
+    else pending.resolve(msg.result);
+  }
+
+  reset(error) {
+    this.ready = false;
+    this.connecting = null;
+    this.upstream = null;
+    for (const pending of this.pending.values()) {
+      clearTimeout(pending.timeout);
+      pending.reject(error);
+    }
+    this.pending.clear();
+  }
+}
+
+const appServerClient = new AppServerRpcClient();
+
 function startCodexServer() {
   const child = spawn(codexBin, ["app-server", "--listen", codexUrl], {
     cwd: root,
@@ -127,43 +216,7 @@ function startCodexServer() {
 }
 
 function appServerRequest(method, params) {
-  return new Promise((resolve, reject) => {
-    let nextId = 1;
-    const pending = new Map();
-    const upstream = createUpstreamWebSocket();
-    const timeout = setTimeout(() => {
-      upstream.close();
-      reject(new Error(`${method} timed out`));
-    }, 8000);
-
-    const request = (requestMethod, requestParams) => {
-      const id = nextId++;
-      pending.set(id, requestMethod);
-      upstream.send(JSON.stringify({ id, method: requestMethod, params: requestParams }));
-    };
-
-    upstream.on("open", () => {
-      request("initialize", {
-        clientInfo: { name: "codex-phone-bridge", title: "Codex Phone Bridge", version: "0.1.0" },
-      });
-      upstream.send(JSON.stringify({ method: "initialized", params: {} }));
-      request(method, params);
-    });
-
-    upstream.on("message", (data) => {
-      const msg = JSON.parse(data.toString());
-      if (!msg.id || pending.get(msg.id) !== method) return;
-      clearTimeout(timeout);
-      upstream.close();
-      if (msg.error) reject(new Error(msg.error.message || JSON.stringify(msg.error)));
-      else resolve(msg.result);
-    });
-
-    upstream.on("error", (error) => {
-      clearTimeout(timeout);
-      reject(error);
-    });
-  });
+  return appServerClient.request(method, params);
 }
 
 function sendJson(res, status, body) {
@@ -341,7 +394,11 @@ function historyFromThread(thread) {
       if (entry && entry.text) history.push(entry);
     }
   }
-  return history.slice(-80);
+  return capHistory(history);
+}
+
+function capHistory(history) {
+  return history.slice(-historyLimit);
 }
 
 class SharedBridge {
@@ -487,7 +544,7 @@ class SharedBridge {
 
       if (msg.method === "item/completed") {
         const entry = summarizeItem(msg.params.item);
-        if (entry && entry.type !== "user") this.history.push(entry);
+        if (entry && entry.type !== "user") this.appendHistory(entry);
         const text = summarizeLiveItem(msg.params.item, "completed");
         if (text) this.emit("status", { text });
         this.emit("event", { event: msg });
@@ -577,8 +634,13 @@ class SharedBridge {
     });
     this.pending.set(id, "turn/start");
     const displayText = savedImages.length ? `${text}\n\n添付: ${savedImages.map((image) => image.name).join(", ")}` : text;
-    this.history.push({ type: "user", text: displayText, attachments: savedImages });
+    this.appendHistory({ type: "user", text: displayText, attachments: savedImages });
     this.emit("user", { text: displayText, attachments: savedImages });
+  }
+
+  appendHistory(entry) {
+    this.history.push(entry);
+    this.history = capHistory(this.history);
   }
 
   approval(requestMsg, decision) {
@@ -598,13 +660,18 @@ class SharedBridge {
 }
 
 function getBridge(threadId, connectionId = crypto.randomUUID()) {
+  if (!threadId) {
+    for (const bridge of bridges.values()) {
+      if (!bridge.requestedThreadId) return bridge;
+    }
+  }
   const key = bridgeKeyForRequest(threadId, connectionId);
   if (!bridges.has(key)) bridges.set(key, new SharedBridge(threadId, key));
   return bridges.get(key);
 }
 
 function bindBrowser(browser, phoneToken, threadId) {
-  const bridge = getBridge(threadId, crypto.randomUUID());
+  const bridge = getBridge(threadId);
   bridge.addClient(browser);
 
   browser.on("message", (data) => {
@@ -736,14 +803,24 @@ async function main() {
         return;
       }
       try {
-        const result = await appServerRequest("thread/resume", {
-          threadId,
-          model,
-          cwd: workdir,
-          approvalPolicy: "on-request",
-          sandbox: "workspace-write",
-        });
-        sendJson(res, 200, { threadId: result.thread.id, history: historyFromThread(result.thread) });
+        let thread;
+        try {
+          const result = await appServerRequest("thread/read", {
+            threadId,
+            includeTurns: true,
+          });
+          thread = result.thread || result;
+        } catch (readError) {
+          const result = await appServerRequest("thread/resume", {
+            threadId,
+            model,
+            cwd: workdir,
+            approvalPolicy: "on-request",
+            sandbox: "workspace-write",
+          });
+          thread = result.thread;
+        }
+        sendJson(res, 200, { threadId: thread.id || threadId, history: historyFromThread(thread) });
       } catch (error) {
         sendJson(res, 500, { error: error.message });
       }

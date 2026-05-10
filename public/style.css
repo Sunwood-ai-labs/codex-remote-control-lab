@@ -36,9 +36,9 @@
   --warning-bg: #fff8ed;
   --warning-text: #5b4632;
   --error: #b33122;
-  --state-ready: #2f7d4f;
+  --state-ready: #266b42;
   --state-running: #0b65c2;
-  --state-approval: #b45f00;
+  --state-approval: #8f4c00;
 }
 
 :root[data-theme="cyberpunk"] {
@@ -114,9 +114,9 @@
   --warning-bg: #fff5dc;
   --warning-text: #6b4c21;
   --error: #b14a32;
-  --state-ready: #3f7f4b;
+  --state-ready: #326b3c;
   --state-running: #2f6f9f;
-  --state-approval: #9a6a1d;
+  --state-approval: #765016;
 }
 
 * {
@@ -755,6 +755,12 @@ body.hide-artifacts .artifact-panel {
   50% {
     transform: scale(1.25);
     opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .run-state-dot {
+    animation: none !important;
   }
 }
 

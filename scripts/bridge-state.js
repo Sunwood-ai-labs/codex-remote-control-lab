@@ -1,6 +1,6 @@
 function bridgeKeyForRequest(threadId, connectionId) {
   if (threadId) return threadId;
-  return `new:${connectionId}`;
+  return "new:shared";
 }
 
 function shouldDisposeIdleBridge({ clientCount }) {

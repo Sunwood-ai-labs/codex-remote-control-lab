@@ -3,10 +3,10 @@ const assert = require("node:assert/strict");
 
 const { bridgeKeyForRequest, shouldDisposeIdleBridge, shouldPromoteBridgeKey } = require("./bridge-state");
 
-test("new thread bridge requests get unique non-sticky keys", () => {
-  assert.equal(bridgeKeyForRequest("", "a"), "new:a");
-  assert.equal(bridgeKeyForRequest(null, "b"), "new:b");
-  assert.notEqual(bridgeKeyForRequest("", "a"), bridgeKeyForRequest("", "b"));
+test("new thread bridge requests share the startup URL bridge", () => {
+  assert.equal(bridgeKeyForRequest("", "a"), "new:shared");
+  assert.equal(bridgeKeyForRequest(null, "b"), "new:shared");
+  assert.equal(bridgeKeyForRequest("", "a"), bridgeKeyForRequest("", "b"));
 });
 
 test("existing thread bridge requests keep the thread id as the shared key", () => {

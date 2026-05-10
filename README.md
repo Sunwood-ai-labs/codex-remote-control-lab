@@ -162,6 +162,7 @@ See [SECURITY.md](SECURITY.md) for the public-safe checklist.
 
 - [English docs](https://sunwood-ai-labs.github.io/codex-remote-control-lab/)
 - [日本語ドキュメント](https://sunwood-ai-labs.github.io/codex-remote-control-lab/ja/)
+- [v0.2.0 release notes](https://sunwood-ai-labs.github.io/codex-remote-control-lab/guide/releases/v0.2.0)
 - [Phone bridge guide](docs/guide/phone-bridge.md)
 - [Protocol notes](docs/guide/protocol.md)
 - [Security model](docs/guide/security.md)

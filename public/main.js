@@ -58,7 +58,9 @@ let statusGroup = null;
 let threadCache = [];
 let liveTurnActive = false;
 let lastHistorySignature = "";
+let lastThreadListError = "";
 let lastThreadRefreshError = "";
+let selectedThreadRefreshActive = false;
 let selectedModel = localStorage.getItem("codexPhoneModel") || "";
 let selectedModelLabel = localStorage.getItem("codexPhoneModelLabel") || "5.5";
 let selectedReasoning = localStorage.getItem("codexPhoneReasoning") || "中";
@@ -86,8 +88,10 @@ const runStateText = {
 
 function setRunState(state, label) {
   if (!runState || !runStateLabel) return;
+  const nextLabel = label || runStateText[state] || state;
+  if (runState.dataset.state === state && runStateLabel.textContent === nextLabel) return;
   runState.dataset.state = state;
-  runStateLabel.textContent = label || runStateText[state] || state;
+  runStateLabel.textContent = nextLabel;
 }
 
 function applyTheme(themeId) {
@@ -681,19 +685,26 @@ async function apiGet(path) {
   return result;
 }
 
-async function loadThreads() {
+async function loadThreads({ background = false } = {}) {
   if (!token) return;
   try {
     const result = await apiGet("/api/threads");
     threadCache = result.data || [];
     renderThreadList();
+    lastThreadListError = "";
   } catch (error) {
-    addEntry("error", `thread一覧を読めませんでした: ${error.message}`);
+    const message = error.message || String(error);
+    if (message !== lastThreadListError) {
+      lastThreadListError = message;
+      addEntry("error", `thread一覧を読めませんでした: ${message}`);
+    }
+    if (!background) throw error;
   }
 }
 
 async function refreshSelectedThread() {
-  if (!selectedThread || liveTurnActive) return;
+  if (!selectedThread || liveTurnActive || selectedThreadRefreshActive) return;
+  selectedThreadRefreshActive = true;
   try {
     const result = await apiGet(`/api/thread?thread=${encodeURIComponent(selectedThread)}`);
     if (result.threadId !== selectedThread) return;
@@ -705,6 +716,8 @@ async function refreshSelectedThread() {
       lastThreadRefreshError = message;
       addEntry("error", `thread更新を読めませんでした: ${message}`);
     }
+  } finally {
+    selectedThreadRefreshActive = false;
   }
 }
 
@@ -1267,6 +1280,6 @@ for (const button of artifactButtons) {
 setReady(false);
 updateModelButton();
 loadArtifacts();
-loadThreads().finally(connect);
-setInterval(loadThreads, 10_000);
+loadThreads().catch(() => {}).finally(connect);
+setInterval(() => loadThreads({ background: true }), 10_000);
 setInterval(refreshSelectedThread, 3_000);

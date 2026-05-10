@@ -162,6 +162,7 @@ Model and intelligence menu on mobile:
 
 - [English docs](https://sunwood-ai-labs.github.io/codex-remote-control-lab/)
 - [日本語ドキュメント](https://sunwood-ai-labs.github.io/codex-remote-control-lab/ja/)
+- [v0.2.0 リリースノート](https://sunwood-ai-labs.github.io/codex-remote-control-lab/ja/guide/releases/v0.2.0)
 - [Phone bridge guide](docs/ja/guide/phone-bridge.md)
 - [Protocol notes](docs/ja/guide/protocol.md)
 - [Security model](docs/ja/guide/security.md)
