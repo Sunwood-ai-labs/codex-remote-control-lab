@@ -54,6 +54,9 @@ let pendingApproval = null;
 let assistantEntry = null;
 let statusGroup = null;
 let threadCache = [];
+let liveTurnActive = false;
+let lastHistorySignature = "";
+let lastThreadRefreshError = "";
 let selectedModel = localStorage.getItem("codexPhoneModel") || "";
 let selectedModelLabel = localStorage.getItem("codexPhoneModelLabel") || "5.5";
 let selectedReasoning = localStorage.getItem("codexPhoneReasoning") || "中";
@@ -563,6 +566,24 @@ function renderHistory(history) {
   for (const entry of history || []) addEntry(entry.type, entry.text, entry.attachments || []);
 }
 
+function historySignature(history = []) {
+  return JSON.stringify(
+    history.map((entry) => ({
+      type: entry.type,
+      text: entry.text || "",
+      attachments: (entry.attachments || []).map((attachment) => attachment.name || attachment.url || ""),
+    })),
+  );
+}
+
+function renderHistoryIfChanged(history = []) {
+  const signature = historySignature(history);
+  if (signature === lastHistorySignature) return false;
+  lastHistorySignature = signature;
+  renderHistory(history);
+  return true;
+}
+
 function renderThreadList() {
   threadList.replaceChildren();
   const query = threadSearch.value.trim().toLowerCase();
@@ -648,6 +669,22 @@ async function loadThreads() {
     renderThreadList();
   } catch (error) {
     addEntry("error", `thread一覧を読めませんでした: ${error.message}`);
+  }
+}
+
+async function refreshSelectedThread() {
+  if (!selectedThread || liveTurnActive) return;
+  try {
+    const result = await apiGet(`/api/thread?thread=${encodeURIComponent(selectedThread)}`);
+    if (result.threadId !== selectedThread) return;
+    renderHistoryIfChanged(result.history || []);
+    lastThreadRefreshError = "";
+  } catch (error) {
+    const message = error.message || String(error);
+    if (message !== lastThreadRefreshError) {
+      lastThreadRefreshError = message;
+      addEntry("error", `thread更新を読めませんでした: ${message}`);
+    }
   }
 }
 
@@ -994,6 +1031,8 @@ function connect() {
     return;
   }
   if (ws) ws.close();
+  liveTurnActive = false;
+  lastHistorySignature = "";
   renderHistory([]);
   const selected = threadCache.find((thread) => thread.id === selectedThread);
   threadTitle.textContent = selected ? titleForThread(selected) : "新しい共有thread";
@@ -1012,12 +1051,13 @@ function connect() {
     const msg = JSON.parse(event.data);
     if (msg.type === "ready") {
       setReady(true);
-      renderHistory(msg.history || []);
+      renderHistoryIfChanged(msg.history || []);
       meta.textContent = `${msg.model}  •  ${msg.clients}端末  •  ${msg.workdir}`;
       addEntry("status", `共有Codex thread ready: ${msg.threadId}`);
       return;
     }
     if (msg.type === "user") {
+      liveTurnActive = true;
       assistantEntry = null;
       addEntry("user", msg.text, msg.attachments || []);
       return;
@@ -1035,8 +1075,11 @@ function connect() {
       return;
     }
     if (msg.type === "turn" && msg.status === "completed") {
+      liveTurnActive = false;
+      lastHistorySignature = "";
       assistantEntry = null;
       loadThreads();
+      refreshSelectedThread();
       return;
     }
     if (msg.type === "error") {
@@ -1180,3 +1223,5 @@ setReady(false);
 updateModelButton();
 loadArtifacts();
 loadThreads().finally(connect);
+setInterval(loadThreads, 10_000);
+setInterval(refreshSelectedThread, 3_000);

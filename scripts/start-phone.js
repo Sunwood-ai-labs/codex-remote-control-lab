@@ -638,6 +638,27 @@ async function main() {
       });
       return;
     }
+    if (url.pathname === "/api/thread") {
+      if (!requireToken(url, phoneToken, res)) return;
+      const threadId = url.searchParams.get("thread");
+      if (!threadId) {
+        sendJson(res, 400, { error: "thread is required" });
+        return;
+      }
+      try {
+        const result = await appServerRequest("thread/resume", {
+          threadId,
+          model,
+          cwd: workdir,
+          approvalPolicy: "on-request",
+          sandbox: "workspace-write",
+        });
+        sendJson(res, 200, { threadId: result.thread.id, history: historyFromThread(result.thread) });
+      } catch (error) {
+        sendJson(res, 500, { error: error.message });
+      }
+      return;
+    }
     if (url.pathname === "/api/automations") {
       if (!requireToken(url, phoneToken, res)) return;
       sendJson(res, 200, { data: readAutomations() });

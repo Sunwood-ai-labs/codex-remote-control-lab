@@ -1699,7 +1699,21 @@ textarea::placeholder {
   }
 
   .composer-footer {
+    gap: 6px;
     padding-bottom: 7px;
+  }
+
+  .composer-left,
+  .composer-right {
+    gap: 5px;
+  }
+
+  .access-button {
+    max-width: 92px;
+  }
+
+  .model-button {
+    max-width: 66px;
   }
 
   .model-menu {
