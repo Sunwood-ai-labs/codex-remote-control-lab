@@ -86,8 +86,10 @@ const runStateText = {
 
 function setRunState(state, label) {
   if (!runState || !runStateLabel) return;
+  const nextLabel = label || runStateText[state] || state;
+  if (runState.dataset.state === state && runStateLabel.textContent === nextLabel) return;
   runState.dataset.state = state;
-  runStateLabel.textContent = label || runStateText[state] || state;
+  runStateLabel.textContent = nextLabel;
 }
 
 function applyTheme(themeId) {
