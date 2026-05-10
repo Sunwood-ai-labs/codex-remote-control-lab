@@ -39,18 +39,35 @@ const token = params.get("token") || localStorage.getItem("codexPhoneToken") || 
 let selectedThread = params.get("thread") || "";
 if (token) localStorage.setItem("codexPhoneToken", token);
 
+const themeOptions = [
+  { id: "simple", name: "シンプル", detail: "今のCodex Desktop風" },
+  { id: "cyberpunk", name: "サイバーパンク", detail: "暗め / ネオンアクセント" },
+  { id: "botanical", name: "ボタニカル", detail: "葉色 / 紙のような柔らかさ" },
+];
+let selectedTheme = localStorage.getItem("codexPhoneTheme") || "simple";
+
 let ws = null;
 let pendingApproval = null;
 let assistantEntry = null;
 let statusGroup = null;
 let threadCache = [];
 let selectedModel = "";
+let settingsRenderSeq = 0;
 let accessMode = {
   label: "フルアクセス",
   approvalPolicy: "never",
   sandboxMode: "danger-full-access",
 };
 let pendingFiles = [];
+
+function applyTheme(themeId) {
+  const nextTheme = themeOptions.some((theme) => theme.id === themeId) ? themeId : "simple";
+  selectedTheme = nextTheme;
+  document.documentElement.dataset.theme = nextTheme;
+  localStorage.setItem("codexPhoneTheme", nextTheme);
+}
+
+applyTheme(selectedTheme);
 
 const accessModes = [
   { label: "フルアクセス", approvalPolicy: "never", sandboxMode: "danger-full-access" },
@@ -489,6 +506,13 @@ function selectThread(threadId) {
 
 function showRightPanel() {
   document.body.classList.remove("hide-artifacts");
+  document.body.classList.add("show-panel");
+  document.body.classList.remove("show-sidebar");
+}
+
+function closeRightPanel() {
+  document.body.classList.add("hide-artifacts");
+  document.body.classList.remove("show-panel");
 }
 
 function clearPanel(title) {
@@ -569,11 +593,15 @@ async function showAutomations() {
 }
 
 async function showSettings() {
+  const renderSeq = ++settingsRenderSeq;
   clearPanel("設定");
-  addPanelRow("読み込み中...");
+  artifactList.replaceChildren();
+  renderThemeSettings();
+  const loadingRow = addPanelRow("読み込み中...");
   try {
     const result = await apiGet("/api/config");
-    artifactList.replaceChildren();
+    if (renderSeq !== settingsRenderSeq) return;
+    loadingRow.remove();
     const config = result.config?.config || {};
     addPanelRow("認証", result.auth?.authMethod || "unknown");
     addPanelRow("既定モデル", config.model || selectedModel || "unknown");
@@ -582,8 +610,43 @@ async function showSettings() {
     addPanelRow("作業ディレクトリ", config.cwd || "");
     if (result.errors?.length) addPanelRow("補足エラー", result.errors.join(" / "));
   } catch (error) {
-    showToolError("設定", error);
+    if (renderSeq !== settingsRenderSeq) return;
+    loadingRow.remove();
+    addPanelRow("読み込みに失敗しました", error.message);
+    addEntry("error", `設定: ${error.message}`);
   }
+}
+
+function renderThemeSettings() {
+  const group = document.createElement("section");
+  group.className = "theme-settings";
+
+  const title = document.createElement("div");
+  title.className = "theme-settings-title";
+  title.textContent = "カラーテーマ";
+  group.appendChild(title);
+
+  const options = document.createElement("div");
+  options.className = "theme-options";
+  for (const theme of themeOptions) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = selectedTheme === theme.id ? "theme-option active" : "theme-option";
+    button.dataset.themeChoice = theme.id;
+    button.innerHTML = `
+      <span class="theme-swatch" aria-hidden="true"><span></span><span></span><span></span></span>
+      <strong>${escapeHtml(theme.name)}</strong>
+      <small>${escapeHtml(theme.detail)}</small>
+    `;
+    button.addEventListener("click", () => {
+      applyTheme(theme.id);
+      addStatus(`テーマを ${theme.name} に切り替えました。`);
+      showSettings();
+    });
+    options.appendChild(button);
+  }
+  group.appendChild(options);
+  artifactList.appendChild(group);
 }
 
 async function showModels() {
@@ -800,8 +863,16 @@ mobileThreadsButton.addEventListener("click", () => document.body.classList.togg
 sidebarScrim.addEventListener("click", () => document.body.classList.remove("show-sidebar"));
 connectButton.addEventListener("click", connect);
 menuButton.addEventListener("click", () => {
-  document.body.classList.toggle("hide-artifacts");
-  addStatus(document.body.classList.contains("hide-artifacts") ? "右パネルを閉じました。" : "右パネルを開きました。");
+  const desktopPanelVisible =
+    window.matchMedia("(min-width: 1101px)").matches && !document.body.classList.contains("hide-artifacts");
+  const mobilePanelVisible = document.body.classList.contains("show-panel");
+  if (desktopPanelVisible || mobilePanelVisible) {
+    closeRightPanel();
+    addStatus("右パネルを閉じました。");
+  } else {
+    showRightPanel();
+    addStatus("右パネルを開きました。");
+  }
 });
 addButton.addEventListener("click", () => fileInput.click());
 fileInput.addEventListener("change", async () => {
