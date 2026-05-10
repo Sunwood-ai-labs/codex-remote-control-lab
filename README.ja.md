@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/assets/codex-remote-control-lab-header.png" alt="Codex Remote Control Lab" width="860">
+  <img src="docs/assets/codex-remote-control-lab-header.png" alt="Codex Remote Control Lab" style="width:100%;height:auto;">
 </p>
 
 <p align="center">
