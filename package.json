@@ -1,0 +1,20 @@
+{
+  "name": "codex-remote-control-lab",
+  "version": "1.0.0",
+  "description": "Local lab for OpenAI Codex CLI remote-control and app-server experiments.",
+  "main": "index.js",
+  "scripts": {
+    "version:codex": "codex --version",
+    "help:remote-control": "codex remote-control --help",
+    "server:ws": "mkdir -p .codex-home-ws && CODEX_HOME=$PWD/.codex-home-ws codex app-server --listen ws://127.0.0.1:45213",
+    "probe:ws": "node scripts/probe-ws.js",
+    "phone": "node scripts/start-phone.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "@openai/codex": "^0.130.0",
+    "ws": "^8.20.0"
+  }
+}

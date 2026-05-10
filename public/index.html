@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Codex Phone Bridge</title>
+    <link rel="stylesheet" href="/style.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <header class="topbar">
+        <div>
+          <h1>Codex</h1>
+          <p id="meta">接続準備中</p>
+        </div>
+        <button id="connect" type="button">接続</button>
+      </header>
+
+      <section id="log" class="log" aria-live="polite"></section>
+
+      <section id="approval" class="approval hidden">
+        <div>
+          <strong>承認リクエスト</strong>
+          <pre id="approvalText"></pre>
+        </div>
+        <div class="actions">
+          <button id="decline" type="button" class="secondary">拒否</button>
+          <button id="approve" type="button">承認</button>
+        </div>
+      </section>
+
+      <form id="composer" class="composer">
+        <textarea id="prompt" rows="3" placeholder="Codexへの指示を書く"></textarea>
+        <button id="send" type="submit">送信</button>
+      </form>
+    </main>
+
+    <script src="/main.js"></script>
+  </body>
+</html>

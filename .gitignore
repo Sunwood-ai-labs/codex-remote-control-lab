@@ -1,0 +1,5 @@
+node_modules/
+.codex-home*/
+schemas/
+*.log
+.phone-token
