@@ -125,6 +125,14 @@ Theme selector on mobile:
 
 ![Cyberpunk theme settings screenshot](docs/assets/theme-cyberpunk-mobile-settings.png)
 
+Codex Desktop 風の mobile composer controls:
+
+![Mobile desktop-like controls screenshot](docs/assets/mobile-desktop-like-controls.png)
+
+Mobile の model / intelligence menu:
+
+![Mobile model menu screenshot](docs/assets/mobile-model-menu.png)
+
 追加スクリーンショットは `docs/assets/` と bridge UI の artifact panel から確認できます。
 
 ## 🔐 Safety Notes
