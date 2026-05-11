@@ -154,10 +154,10 @@ button {
 .sidebar {
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  gap: 14px;
   min-width: 0;
   min-height: 0;
-  padding: 12px 12px 16px;
+  padding: 10px 8px 14px;
   background: linear-gradient(180deg, var(--sidebar-start) 0%, var(--sidebar-end) 100%);
   border-right: 1px solid var(--line);
 }
@@ -421,29 +421,29 @@ body.hide-artifacts .artifact-panel {
   min-height: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
-  padding: 34px clamp(22px, 8vw, 160px) 24px;
+  padding: 24px clamp(16px, 6vw, 120px) 16px;
   touch-action: pan-y;
   -webkit-overflow-scrolling: touch;
 }
 
 .entry {
   display: grid;
-  grid-template-columns: 30px minmax(0, 1fr) auto;
-  gap: 12px;
-  max-width: 960px;
-  margin: 0 auto 24px;
+  grid-template-columns: 28px minmax(0, 1fr) auto;
+  gap: 10px;
+  max-width: 860px;
+  margin: 0 auto 20px;
   color: var(--entry);
 }
 
 .entry-avatar {
   display: grid;
   place-items: center;
-  width: 28px;
-  height: 28px;
-  border-radius: 7px;
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
   background: var(--avatar);
   color: var(--avatar-text);
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 650;
 }
 
@@ -453,11 +453,11 @@ body.hide-artifacts .artifact-panel {
 }
 
 .entry.user .entry-body {
-  border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--line));
+  border: 1px solid var(--line);
   border-radius: 16px;
-  padding: 14px 16px;
-  background: color-mix(in srgb, var(--accent) 7%, var(--card));
-  box-shadow: 0 8px 18px color-mix(in srgb, var(--accent) 8%, transparent);
+  padding: 12px 16px;
+  background: var(--soft);
+  box-shadow: none;
 }
 
 .entry-body {
@@ -687,18 +687,17 @@ body.hide-artifacts .artifact-panel {
 .run-state {
   display: inline-flex;
   align-items: center;
-  gap: 9px;
+  gap: 8px;
   width: min(860px, calc(100% - 48px));
-  min-height: 34px;
-  margin: 0 auto 10px;
+  min-height: 28px;
+  margin: 0 auto 8px;
   border: 1px solid var(--line);
   border-radius: 999px;
-  padding: 0 14px;
-  background: var(--card);
+  padding: 0 12px;
+  background: var(--soft);
   color: var(--muted);
-  box-shadow: 0 8px 18px color-mix(in srgb, var(--text) 5%, transparent);
-  font-size: 13px;
-  font-weight: 620;
+  font-size: 12px;
+  font-weight: 500;
 }
 
 .run-state-dot {
@@ -793,15 +792,14 @@ body.hide-artifacts .artifact-panel {
 .composer {
   position: relative;
   flex: 0 0 auto;
-  width: min(860px, calc(100% - 48px));
-  min-height: 116px;
-  margin: 0 auto 20px;
+  width: min(780px, calc(100% - 40px));
+  min-height: 108px;
+  margin: 0 auto max(18px, env(safe-area-inset-bottom));
   border: 1px solid var(--composer-border);
-  border-radius: 22px;
+  border-radius: 18px;
   background: var(--composer-bg);
   box-shadow: var(--composer-shadow);
   overflow: visible;
-  margin-bottom: max(20px, env(safe-area-inset-bottom));
 }
 
 .attachments {
