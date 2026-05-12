@@ -245,6 +245,7 @@ See [SECURITY.md](SECURITY.md) for the public-safe checklist.
 - [Phone bridge guide](docs/guide/phone-bridge.md)
 - [Protocol notes](docs/guide/protocol.md)
 - [Security model](docs/guide/security.md)
+- [Contributing and upstream PRs](docs/guide/contributing.md)
 
 ## 🗂️ Repository Layout
 

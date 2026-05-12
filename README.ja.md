@@ -245,6 +245,7 @@ Mobile flow:
 - [Phone bridge guide](docs/ja/guide/phone-bridge.md)
 - [Protocol notes](docs/ja/guide/protocol.md)
 - [Security model](docs/ja/guide/security.md)
+- [コントリビュートと上流PR](docs/ja/guide/contributing.md)
 
 ## 🗂️ Repository Layout
 
