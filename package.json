@@ -36,6 +36,7 @@
     "ws": "^8.20.0"
   },
   "dependencies": {
+    "@fortawesome/free-solid-svg-icons": "^7.2.0",
     "lucide-react": "^1.14.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"

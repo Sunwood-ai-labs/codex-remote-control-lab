@@ -1,4 +1,5 @@
 import React from "react";
+import { faChevronDown } from "@fortawesome/free-solid-svg-icons";
 import {
   Box,
   Brain,
@@ -29,6 +30,15 @@ const navItems = [
 
 const artifacts = ["README.md", "AGENTS.md"];
 const reasoningLevels = ["低", "中", "高", "非常に高"];
+
+function FaIcon({ icon, className }) {
+  const [width, height, , , path] = icon.icon;
+  return (
+    <svg className={className} aria-hidden="true" focusable="false" data-prefix={icon.prefix} data-icon={icon.iconName} role="img" viewBox={`0 0 ${width} ${height}`} xmlns="http://www.w3.org/2000/svg">
+      <path fill="currentColor" d={path} />
+    </svg>
+  );
+}
 
 function IconCommand({ id, icon, label, ariaLabel, tone }) {
   const Icon = icon;
@@ -132,11 +142,17 @@ function Composer() {
       <div className="composer-footer">
         <div className="composer-left">
           <button type="button" className="ghost-button icon-only" id="addButton" aria-label="画像を添付"><Plus size={18} strokeWidth={1.9} /></button>
-          <button type="button" className="access-button" id="accessButton">フルアクセス⌄</button>
+          <button type="button" className="access-button" id="accessButton">
+            <span className="access-label">フルアクセス</span>
+            <FaIcon icon={faChevronDown} className="button-chevron-icon" />
+          </button>
         </div>
         <div className="composer-right">
           <button type="button" className="thinking-button" id="thinkingButton" title="インテリジェンス" aria-label="インテリジェンスを選択"><Brain size={18} strokeWidth={1.9} /></button>
-          <button type="button" id="modelButton" className="model-button">5.5 中⌄</button>
+          <button type="button" id="modelButton" className="model-button">
+            <span className="model-button-label">5.5 中</span>
+            <FaIcon icon={faChevronDown} className="button-chevron-icon" />
+          </button>
           <button type="button" className="voice-button" id="voiceButton" title="音声入力" aria-label="音声入力"><Mic size={18} strokeWidth={1.9} /></button>
           <button id="send" type="submit" className="send-button" title="送信" aria-label="送信"><Send size={18} strokeWidth={2.2} /></button>
         </div>

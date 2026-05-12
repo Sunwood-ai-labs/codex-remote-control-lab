@@ -483,26 +483,18 @@ button.project-heading.active {
   color: var(--text);
 }
 
-.project-folder {
-  position: relative;
-  display: inline-block;
-  width: 18px;
-  height: 13px;
-  border: 1.7px solid var(--muted);
-  border-radius: 3px;
+.project-icon-slot {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
 }
 
-.project-folder::before {
-  content: "";
-  position: absolute;
-  left: 1px;
-  top: -5px;
-  width: 8px;
-  height: 5px;
-  border: 1.7px solid var(--muted);
-  border-bottom: 0;
-  border-radius: 3px 3px 0 0;
-  background: transparent;
+.project-icon {
+  display: block;
+  width: 16px;
+  height: 16px;
+  color: currentColor;
 }
 
 .thread-item {
@@ -915,9 +907,13 @@ body.hide-artifacts .artifact-panel {
 }
 
 .status-details summary::after {
-  content: "⌄";
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-right: 1.6px solid currentColor;
+  border-bottom: 1.6px solid currentColor;
   color: var(--muted);
-  font-size: 14px;
+  transform: translateY(-1px) rotate(45deg);
   transition: transform 160ms ease;
 }
 
@@ -1287,6 +1283,7 @@ textarea::placeholder {
 }
 
 .access-button {
+  gap: 4px;
   color: var(--accent);
 }
 
@@ -1302,15 +1299,20 @@ textarea::placeholder {
   text-overflow: ellipsis;
 }
 
-.model-button::after {
-  content: "";
+.access-label,
+.model-button-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.button-chevron-icon {
+  display: block;
   flex: 0 0 auto;
-  width: 7px;
-  height: 7px;
-  border-right: 2px solid currentColor;
-  border-bottom: 2px solid currentColor;
-  transform: translateY(-2px) rotate(45deg);
-  opacity: 0.78;
+  width: 9px;
+  height: 9px;
+  opacity: 0.72;
 }
 
 .thinking-button,

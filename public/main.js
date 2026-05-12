@@ -115,8 +115,32 @@ const accessModes = [
   { label: "読み取り専用", approvalPolicy: "on-request", sandboxMode: "read-only" },
 ];
 
+const fontAwesomeIcons = {
+  chevronDown: {
+    viewBox: "0 0 448 512",
+    path: "M201.4 406.6c12.5 12.5 32.8 12.5 45.3 0l192-192c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0L224 338.7 54.6 169.4c-12.5-12.5-32.8-12.5-45.3 0s-12.5 32.8 0 45.3l192 192z",
+  },
+  folder: {
+    viewBox: "0 0 512 512",
+    path: "M64 448l384 0c35.3 0 64-28.7 64-64l0-240c0-35.3-28.7-64-64-64L298.7 80c-6.9 0-13.7-2.2-19.2-6.4L241.1 44.8C230 36.5 216.5 32 202.7 32L64 32C28.7 32 0 60.7 0 96L0 384c0 35.3 28.7 64 64 64z",
+  },
+  folderPlus: {
+    viewBox: "0 0 512 512",
+    path: "M512 384c0 35.3-28.7 64-64 64L64 448c-35.3 0-64-28.7-64-64L0 96C0 60.7 28.7 32 64 32l138.7 0c13.8 0 27.3 4.5 38.4 12.8l38.4 28.8c5.5 4.2 12.3 6.4 19.2 6.4L448 80c35.3 0 64 28.7 64 64l0 240zM256 160c-13.3 0-24 10.7-24 24l0 48-48 0c-13.3 0-24 10.7-24 24s10.7 24 24 24l48 0 0 48c0 13.3 10.7 24 24 24s24-10.7 24-24l0-48 48 0c13.3 0 24-10.7 24-24s-10.7-24-24-24l-48 0 0-48c0-13.3-10.7-24-24-24z",
+  },
+};
+
+function fontAwesomeIcon(name, className) {
+  const icon = fontAwesomeIcons[name];
+  return `<svg class="${className}" aria-hidden="true" focusable="false" data-prefix="fas" data-icon="${name}" role="img" viewBox="${icon.viewBox}" xmlns="http://www.w3.org/2000/svg"><path fill="currentColor" d="${icon.path}"></path></svg>`;
+}
+
+function setAccessButtonLabel() {
+  accessButton.innerHTML = `<span class="access-label">${escapeHtml(accessMode.label)}</span>${fontAwesomeIcon("chevronDown", "button-chevron-icon")}`;
+}
+
 function updateModelButton() {
-  modelButton.textContent = `${selectedModelLabel} ${selectedReasoning}`;
+  modelButton.innerHTML = `<span class="model-button-label">${escapeHtml(`${selectedModelLabel} ${selectedReasoning}`)}</span>${fontAwesomeIcon("chevronDown", "button-chevron-icon")}`;
   modelButton.setAttribute("aria-label", `モデル ${selectedModelLabel}、インテリジェンス ${selectedReasoning}`);
   for (const row of modelMenu.querySelectorAll("[data-reasoning]")) {
     const active = row.dataset.reasoning === selectedReasoning;
@@ -664,7 +688,7 @@ function renderThreadList() {
   const newProject = document.createElement("button");
   newProject.type = "button";
   newProject.className = selectedThread ? "project-heading new-project" : "project-heading new-project active";
-  newProject.innerHTML = '<span class="project-folder"></span><span>New project</span>';
+  newProject.innerHTML = `${fontAwesomeIcon("folderPlus", "project-icon")}<span>New project</span>`;
   newProject.addEventListener("click", () => selectThread(""));
   threadList.appendChild(newProject);
 
@@ -685,7 +709,8 @@ function renderThreadList() {
     const heading = document.createElement("div");
     heading.className = "project-heading";
     const folder = document.createElement("span");
-    folder.className = "project-folder";
+    folder.className = "project-icon-slot";
+    folder.innerHTML = fontAwesomeIcon("folder", "project-icon");
     const name = document.createElement("span");
     name.textContent = project;
     heading.append(folder, name);
@@ -1300,7 +1325,7 @@ fileInput.addEventListener("change", async () => {
 accessButton.addEventListener("click", () => {
   const index = accessModes.findIndex((candidate) => candidate.label === accessMode.label);
   accessMode = accessModes[(index + 1) % accessModes.length];
-  accessButton.textContent = `${accessMode.label}⌄`;
+  setAccessButtonLabel();
   addStatus(`権限を ${accessMode.label} に切り替えました。次の送信から反映します。`);
 });
 thinkingButton.addEventListener("click", toggleModelMenu);
@@ -1374,6 +1399,7 @@ for (const button of artifactButtons) {
 }
 
 setReady(false);
+setAccessButtonLabel();
 updateModelButton();
 modelButton.setAttribute("aria-haspopup", "menu");
 modelButton.setAttribute("aria-expanded", "false");
