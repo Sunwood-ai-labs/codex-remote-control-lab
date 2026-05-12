@@ -28,7 +28,17 @@ function loadEnvFile(filePath) {
   }
 }
 
-loadEnvFile(path.join(root, ".env"));
+// Walk up from root to find .env — handles git worktrees where root is
+// several levels inside the actual project directory.
+(function loadEnvWalkUp() {
+  let dir = root;
+  for (let i = 0; i < 6; i++) {
+    loadEnvFile(path.join(dir, ".env"));
+    const parent = path.dirname(dir);
+    if (parent === dir) break;
+    dir = parent;
+  }
+})();
 
 const codexBin = path.join(root, "node_modules", ".bin", "codex");
 const uiPort = Number(process.env.PHONE_UI_PORT || 45214);

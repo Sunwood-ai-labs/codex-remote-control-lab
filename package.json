@@ -7,7 +7,7 @@
   "scripts": {
     "version:codex": "codex --version",
     "help:remote-control": "codex remote-control --help",
-    "server:ws": "mkdir -p .codex-home-ws && CODEX_HOME=$PWD/.codex-home-ws codex app-server --listen ws://127.0.0.1:45213",
+    "server:ws": "codex app-server --listen ws://127.0.0.1:45213",
     "probe:ws": "node scripts/probe-ws.js",
     "phone": "node scripts/start-phone.js",
     "screenshots:readme": "node scripts/capture-readme-screenshots.js",
