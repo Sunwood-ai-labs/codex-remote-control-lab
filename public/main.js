@@ -99,6 +99,7 @@ const runStateText = {
   ready: "待機中",
   running: "Codex 処理中",
   streaming: "回答生成中",
+  reconnecting: "再接続中",
   approval: "承認待ち",
   syncing: "履歴同期中",
   done: "完了",
@@ -112,6 +113,56 @@ function setRunState(state, label) {
   if (runState.dataset.state === state && runStateLabel.textContent === nextLabel) return;
   runState.dataset.state = state;
   runStateLabel.textContent = nextLabel;
+}
+
+function parseMaybeJson(value) {
+  if (typeof value !== "string") return value;
+  const trimmed = value.trim();
+  if (!trimmed.startsWith("{") && !trimmed.startsWith("[")) return value;
+  try {
+    return JSON.parse(trimmed);
+  } catch {
+    return value;
+  }
+}
+
+function pickErrorPayload(raw) {
+  const value = parseMaybeJson(raw);
+  if (!value || typeof value !== "object") return { message: String(raw || "Codex error") };
+  if (value.error) return value.error;
+  if (value.params?.error) return value.params.error;
+  return value;
+}
+
+function normalizeUiError(raw) {
+  const problem = pickErrorPayload(raw);
+  const detail = typeof problem === "string" ? problem : JSON.stringify(problem);
+  const message = String(problem.message || problem.additionalDetails || raw || "Codex error");
+  const streamDisconnected =
+    Boolean(problem.codexErrorInfo?.responseStreamDisconnected) || /responseStreamDisconnected|response\.completed/i.test(detail);
+  const retrying = Boolean(problem.willRetry) || /^Reconnecting\.\.\./i.test(message);
+  if (streamDisconnected && retrying) {
+    return {
+      state: "reconnecting",
+      kind: "status",
+      text: `Codex応答ストリームが一時切断されました。再接続中です。${message ? ` (${message})` : ""}`,
+      detail,
+    };
+  }
+  if (streamDisconnected) {
+    return {
+      state: "error",
+      kind: "error",
+      text: "Codex応答ストリームが切断されました。再接続後にもう一度送信してください。",
+      detail,
+    };
+  }
+  return {
+    state: "error",
+    kind: "error",
+    text: message,
+    detail,
+  };
 }
 
 function applyTheme(themeId) {
@@ -1501,7 +1552,14 @@ function connect() {
   });
 
   ws.addEventListener("message", (event) => {
-    const msg = JSON.parse(event.data);
+    let msg;
+    try {
+      msg = JSON.parse(event.data);
+    } catch {
+      setRunState("error", "bridge応答を読み取れません");
+      addEntry("error", "bridge応答を読み取れません。再接続してください。");
+      return;
+    }
     if (msg.type === "ready") {
       setReady(true);
       syncReadyThread(msg.threadId);
@@ -1543,8 +1601,10 @@ function connect() {
       return;
     }
     if (msg.type === "error") {
-      setRunState("error", msg.text || "エラー");
-      addEntry("error", msg.text);
+      const problem = normalizeUiError(msg.text || msg);
+      setRunState(problem.state, problem.text);
+      addEntry(problem.kind, problem.text);
+      if (problem.detail && problem.detail !== problem.text) console.warn("Codex bridge error details", problem.detail);
       return;
     }
     if (msg.type === "status") {
