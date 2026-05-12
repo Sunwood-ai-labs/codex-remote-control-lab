@@ -122,6 +122,8 @@ History sync is enabled by default. After a web turn completes, the bridge warms
 
 Startup notifications are opt-in. `PHONE_NTFY_TOPIC` sends the bridge URLs to an ntfy topic, `PHONE_PUSHOVER_TOKEN` plus `PHONE_PUSHOVER_USER` sends them through Pushover, and `PHONE_DISCORD_WEBHOOK_URL` posts them to Discord. `npm run phone` loads local `.env` values before reading these variables. `PHONE_NTFY_SERVER` defaults to `https://ntfy.sh` and must use HTTPS. The notification body includes the tokenized bridge URL, so use a private/protected topic, account, or channel and keep these values in local environment variables.
 
+Tokenless debug mode intentionally skips startup notifications. If you manually send a `PHONE_DEBUG_NO_TOKEN=1` plus `PHONE_DEBUG_BIND=lan` URL to Discord, treat that channel as private and trusted: anyone who can open the URL on the LAN can operate the bridge without a token.
+
 The current phone bridge supports:
 
 - Codex Desktop-like browser layout with a left thread sidebar, central conversation, right artifact panel, and bottom composer

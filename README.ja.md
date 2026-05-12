@@ -122,6 +122,8 @@ PHONE_NOTIFY_TIMEOUT_MS=5000
 
 起動通知は opt-in です。`PHONE_NTFY_TOPIC` がある場合は ntfy topic へ、`PHONE_PUSHOVER_TOKEN` と `PHONE_PUSHOVER_USER` がある場合は Pushover へ、`PHONE_DISCORD_WEBHOOK_URL` がある場合は Discord へ bridge URL を送ります。`npm run phone` は local `.env` を読んでから環境変数を参照します。`PHONE_NTFY_SERVER` は既定で `https://ntfy.sh`、HTTPS 必須です。通知本文には token 付き URL が入るので、private/protected topic、account、channel を使い、値は local environment variables に置いてください。
 
+token なしデバッグモードでは、起動通知は意図的にスキップされます。`PHONE_DEBUG_NO_TOKEN=1` と `PHONE_DEBUG_BIND=lan` の URL を手動で Discord に送る場合は、自分の private/trusted な webhook・channel 前提で扱ってください。同じ LAN 上でその URL を開ける人は、token なしで bridge を操作できます。
+
 現在の bridge は次をサポートします。
 
 - Codex Desktop 風の sidebar / conversation / artifact panel / composer layout
