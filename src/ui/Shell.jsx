@@ -106,7 +106,7 @@ function Composer() {
     <form id="composer" className="composer">
       <input id="fileInput" className="hidden" type="file" accept="image/*" multiple />
       <div id="attachments" className="attachments" aria-live="polite" />
-      <textarea id="prompt" rows="3" placeholder="Codex に指示する" aria-label="Codex へのメッセージ" />
+      <textarea id="prompt" rows="2" placeholder="フォローアップの変更を求める" aria-label="Codex へのメッセージ" />
       <div className="composer-footer">
         <div className="composer-left">
           <button type="button" className="ghost-button" id="addButton" aria-label="画像を添付">＋</button>

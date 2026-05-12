@@ -45,8 +45,8 @@
   --surface-under: #e6e7df;
   --surface-raised: #fffffb;
   --focus: #2d7ff9;
-  --dock-width: 400px;
-  --thread-width: 282px;
+  --dock-width: 304px;
+  --thread-width: 256px;
   --message-width: 880px;
   --compact-radius: 8px;
   --control-height: 34px;
@@ -654,7 +654,7 @@ p {
 
 .content-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(360px, min(var(--dock-width), 42vw));
+  grid-template-columns: minmax(0, 1fr) minmax(292px, min(var(--dock-width), 32vw));
   height: 100%;
   min-height: 0;
   overflow: hidden;
@@ -954,7 +954,7 @@ body.hide-artifacts .artifact-panel {
   position: relative;
   z-index: 8;
   align-self: center;
-  width: min(var(--message-width), calc(100% - 48px));
+  width: min(760px, calc(100% - 40px));
   margin: 0 0 10px;
   padding: 14px;
   border: 1px solid var(--warning-line);
@@ -979,7 +979,7 @@ body.hide-artifacts .artifact-panel {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  width: min(var(--message-width), calc(100% - 48px));
+  width: min(760px, calc(100% - 40px));
   min-height: 28px;
   margin: 0 0 8px;
   border: 1px solid var(--line);
@@ -1092,12 +1092,12 @@ body.hide-artifacts .artifact-panel {
 .composer {
   position: sticky;
   z-index: 9;
-  bottom: max(18px, env(safe-area-inset-bottom));
+  bottom: max(14px, env(safe-area-inset-bottom));
   align-self: center;
   flex: 0 0 auto;
-  width: min(800px, calc(100% - 40px));
-  min-height: 108px;
-  margin: 0 0 max(18px, env(safe-area-inset-bottom));
+  width: min(760px, calc(100% - 40px));
+  min-height: 86px;
+  margin: 0 0 max(14px, env(safe-area-inset-bottom));
   border: 1px solid var(--composer-border);
   border-radius: 14px;
   background: var(--composer-bg);
@@ -1157,11 +1157,12 @@ body.hide-artifacts .artifact-panel {
 
 textarea {
   width: 100%;
-  min-height: 64px;
+  height: 42px;
+  min-height: 42px;
   max-height: 180px;
   resize: vertical;
   border: 0;
-  padding: 18px 20px 8px;
+  padding: 12px 18px 0;
   background: transparent;
   color: inherit;
   outline: 0;
@@ -1178,14 +1179,14 @@ textarea::placeholder {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 4px 12px 12px;
+  padding: 0 10px 8px;
 }
 
 .composer-left,
 .composer-right {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   min-width: 0;
 }
 
@@ -1374,11 +1375,9 @@ textarea::placeholder {
   flex-direction: column;
   gap: 10px;
   min-height: 0;
-  padding: 10px;
-  border-left: 1px solid var(--line);
-  background:
-    linear-gradient(180deg, color-mix(in srgb, var(--panel) 85%, transparent), var(--panel)),
-    var(--panel);
+  padding: 16px 14px 16px 8px;
+  border-left: 1px solid color-mix(in srgb, var(--line) 72%, transparent);
+  background: transparent;
   overflow: hidden;
 }
 
@@ -1388,10 +1387,12 @@ textarea::placeholder {
   flex-direction: column;
   min-width: 0;
   border: 1px solid var(--line);
-  border-radius: 10px;
-  padding: 12px;
+  border-radius: 14px;
+  padding: 14px;
   background: color-mix(in srgb, var(--card) 94%, transparent);
-  box-shadow: inset 0 1px 0 color-mix(in srgb, #fff 66%, transparent);
+  box-shadow:
+    0 10px 26px color-mix(in srgb, var(--text) 5%, transparent),
+    inset 0 1px 0 color-mix(in srgb, #fff 66%, transparent);
   overflow: hidden;
 }
 
