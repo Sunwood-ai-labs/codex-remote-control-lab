@@ -24,7 +24,9 @@ For remote access outside a trusted local network, prefer:
 
 The bridge creates `.phone-token` with mode `0600` when `PHONE_TOKEN` is not provided. Delete `.phone-token` to rotate the generated token.
 
-`PHONE_DEBUG_NO_TOKEN=1` is a localhost-only debugging exception. In that mode the bridge binds to `127.0.0.1` and does not create or require a token. Do not use it for phones, LAN sharing, tunnels, or shared networks.
+`PHONE_DEBUG_NO_TOKEN=1` is the tokenless debugging switch. By itself, it binds the bridge to `127.0.0.1` and does not create or require a token.
+
+`PHONE_DEBUG_BIND=lan` is the explicit tokenless LAN debug bind. Use it only together with `PHONE_DEBUG_NO_TOKEN=1` on a trusted private network you control, and never through public tunnels or raw port forwards.
 
 ## Beginner Runtime Notes
 

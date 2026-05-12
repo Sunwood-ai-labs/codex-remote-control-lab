@@ -48,13 +48,23 @@ http://192.168.11.8:45214/?token=...
 
 同じ Wi-Fi/LAN 上のスマホで、その URL をそのまま開きます。
 
+繰り返し使う local 設定は、example をコピーして編集できます。
+
+```bash
+cp .env.example .env
+```
+
 token なしで UI をローカルデバッグする場合は、次を使います。
 
 ```bash
 PHONE_DEBUG_NO_TOKEN=1 npm run phone
 ```
 
+local `.env` に `PHONE_DEBUG_NO_TOKEN=1` を置いても、同じ localhost 専用 mode になります。
+
 このデバッグモードでは bridge を `127.0.0.1` に bind し、`?token=...` なしの URL を表示します。LAN、tunnel、shared network では使わないでください。
+
+信頼できる LAN 上の別端末から token なしで触りたい場合だけ、`PHONE_DEBUG_NO_TOKEN=1` と一緒に `PHONE_DEBUG_BIND=lan` を置きます。この場合は bridge を `0.0.0.0` に bind し、token なし LAN URL を表示します。自分が管理する private network でだけ使ってください。
 
 ## 🧭 構成
 
@@ -87,20 +97,24 @@ local smoke test では、WebSocket app-server 経由の `initialize` / `thread/
 
 便利な環境変数:
 
-```bash
-PHONE_UI_PORT=45214 npm run phone
-CODEX_WORKDIR=/Users/admin/Prj/some-project npm run phone
-CODEX_MODEL=gpt-5.4 npm run phone
-CODEX_APP_SERVER_SOCK=/Users/admin/.codex/app-server-control/app-server-control.sock npm run phone
-CODEX_APP_SERVER_URL=ws://127.0.0.1:45213 npm run phone
-CODEX_HISTORY_SYNC=0 npm run phone
-PHONE_TOKEN=choose-your-own-token npm run phone
-PHONE_DEBUG_NO_TOKEN=1 npm run phone
-PHONE_NTFY_TOPIC=your-private-topic npm run phone
-PHONE_PUSHOVER_TOKEN=app-token PHONE_PUSHOVER_USER=user-key npm run phone
-PHONE_DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/... npm run phone
-PHONE_NOTIFY_TIMEOUT_MS=5000 npm run phone
+```text
+PHONE_UI_PORT=45214
+CODEX_WORKDIR=/Users/admin/Prj/some-project
+CODEX_MODEL=gpt-5.4
+CODEX_APP_SERVER_SOCK=/Users/admin/.codex/app-server-control/app-server-control.sock
+CODEX_APP_SERVER_URL=ws://127.0.0.1:45213
+CODEX_HISTORY_SYNC=1
+PHONE_TOKEN=choose-your-own-token
+PHONE_DEBUG_NO_TOKEN=1
+PHONE_DEBUG_BIND=lan
+PHONE_NTFY_TOPIC=your-private-topic
+PHONE_PUSHOVER_TOKEN=app-token
+PHONE_PUSHOVER_USER=user-key
+PHONE_DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/...
+PHONE_NOTIFY_TIMEOUT_MS=5000
 ```
+
+公開安全な template は [.env.example](.env.example) にあります。
 
 `CODEX_APP_SERVER_SOCK` または `CODEX_APP_SERVER_URL` を指定すると、bridge は新しい app-server を起動せず、既存の headless app-server に接続します。Codex Desktop 本体とライブ同期したい場合は、Desktop の通常ローカル会話画面ではなく、Desktop の Remote Connection と OCdex を同じ headless app-server に接続してください。Desktop の通常ローカル会話画面は専用の `stdio` app-server を使うため、外部 bridge からその画面へ直接ライブ注入する公開経路はありません。
 
@@ -213,7 +227,7 @@ Mobile flow:
 - Codex app-server は `127.0.0.1` に保ちます。
 - 認証なしの Codex app-server を LAN や public interface に直接 bind しないでください。
 - 表示された `?token=...` 付き URL は local access key として扱い、公開 issue、共有チャット、スクリーンショット、配信には載せないでください。
-- `PHONE_DEBUG_NO_TOKEN=1` は localhost デバッグ専用です。`127.0.0.1` に bind され、LAN 端末、tunnel、shared network へは公開しないでください。
+- `PHONE_DEBUG_NO_TOKEN=1` は localhost デバッグ用です。信頼できる private LAN に token なしで出す場合だけ `PHONE_DEBUG_BIND=lan` を一緒に使ってください。
 - bridge は `Ctrl+C` で停止します。terminal を閉じた場合や PC を再起動した後は、もう一度 `npm run phone` を実行します。
 - trusted LAN 外から使う場合は SSH forwarding、VPN、mesh network を優先してください。
 - 認証なしの public tunnel や raw port forwarding で bridge を公開しないでください。

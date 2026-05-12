@@ -48,13 +48,23 @@ http://192.168.11.8:45214/?token=...
 
 Open that exact URL from a phone connected to the same Wi-Fi/LAN.
 
+For repeatable local settings, copy the example file and edit it:
+
+```bash
+cp .env.example .env
+```
+
 For localhost-only UI debugging without a token, run:
 
 ```bash
 PHONE_DEBUG_NO_TOKEN=1 npm run phone
 ```
 
+You can also put `PHONE_DEBUG_NO_TOKEN=1` in `.env` for the same localhost-only mode.
+
 That debug mode binds the bridge to `127.0.0.1` and prints a URL without `?token=...`. Do not use it for LAN, tunnel, or shared-network access.
+
+If you intentionally need tokenless access from another device on a trusted LAN, add `PHONE_DEBUG_BIND=lan` alongside `PHONE_DEBUG_NO_TOKEN=1`. This binds the bridge to `0.0.0.0` and prints LAN URLs without a token, so only use it on a private network you control.
 
 ## 🧭 Architecture
 
@@ -87,20 +97,24 @@ The main value of the bridge is continuity: the desktop keeps running Codex loca
 
 Useful environment variables:
 
-```bash
-PHONE_UI_PORT=45214 npm run phone
-CODEX_WORKDIR=/Users/admin/Prj/some-project npm run phone
-CODEX_MODEL=gpt-5.4 npm run phone
-CODEX_APP_SERVER_SOCK=/Users/admin/.codex/app-server-control/app-server-control.sock npm run phone
-CODEX_APP_SERVER_URL=ws://127.0.0.1:45213 npm run phone
-CODEX_HISTORY_SYNC=0 npm run phone
-PHONE_TOKEN=choose-your-own-token npm run phone
-PHONE_DEBUG_NO_TOKEN=1 npm run phone
-PHONE_NTFY_TOPIC=your-private-topic npm run phone
-PHONE_PUSHOVER_TOKEN=app-token PHONE_PUSHOVER_USER=user-key npm run phone
-PHONE_DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/... npm run phone
-PHONE_NOTIFY_TIMEOUT_MS=5000 npm run phone
+```text
+PHONE_UI_PORT=45214
+CODEX_WORKDIR=/Users/admin/Prj/some-project
+CODEX_MODEL=gpt-5.4
+CODEX_APP_SERVER_SOCK=/Users/admin/.codex/app-server-control/app-server-control.sock
+CODEX_APP_SERVER_URL=ws://127.0.0.1:45213
+CODEX_HISTORY_SYNC=1
+PHONE_TOKEN=choose-your-own-token
+PHONE_DEBUG_NO_TOKEN=1
+PHONE_DEBUG_BIND=lan
+PHONE_NTFY_TOPIC=your-private-topic
+PHONE_PUSHOVER_TOKEN=app-token
+PHONE_PUSHOVER_USER=user-key
+PHONE_DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/...
+PHONE_NOTIFY_TIMEOUT_MS=5000
 ```
+
+See [.env.example](.env.example) for a public-safe template.
 
 `CODEX_APP_SERVER_SOCK` or `CODEX_APP_SERVER_URL` makes the bridge attach to an existing headless app-server instead of starting a new one. For live sync with Codex Desktop, use this with a Desktop Remote Connection that points at the same headless app-server. The normal local conversation view in Codex Desktop uses a private `stdio` app-server, so there is no public external route for a bridge to inject live UI updates into that local view.
 
@@ -213,7 +227,7 @@ More screenshots are available in `docs/assets/` and through the artifact panel 
 - Keep the Codex app-server on `127.0.0.1`.
 - Do not bind an unauthenticated Codex app-server to a LAN or public interface.
 - Treat the printed `?token=...` URL like a local access key. Do not post it in public issues, chats, screenshots, or streams.
-- Use `PHONE_DEBUG_NO_TOKEN=1` only for localhost debugging; it binds to `127.0.0.1` and must not be exposed to LAN devices, tunnels, or shared networks.
+- Use `PHONE_DEBUG_NO_TOKEN=1` for localhost debugging. Add `PHONE_DEBUG_BIND=lan` only when you intentionally want tokenless LAN access on a trusted private network.
 - Stop the bridge with `Ctrl+C`. If you close the terminal or restart the PC, run `npm run phone` again.
 - Use SSH forwarding, a VPN, or a mesh network for access outside a trusted LAN.
 - Do not expose the bridge through an unauthenticated public tunnel or raw port forward.

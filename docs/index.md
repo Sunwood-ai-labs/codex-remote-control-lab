@@ -51,4 +51,4 @@ npm run probe:ws
 phone browser -> http://Mac-LAN-IP:45214 -> Node bridge -> ws://127.0.0.1:45213 -> Codex app-server
 ```
 
-The app-server remains local. The bridge requires a token on page, API, and WebSocket requests by default. For host-only UI debugging, `PHONE_DEBUG_NO_TOKEN=1 npm run phone` binds the bridge to `127.0.0.1` and omits the token.
+The app-server remains local. The bridge requires a token on page, API, and WebSocket requests by default. For host-only UI debugging, `PHONE_DEBUG_NO_TOKEN=1 npm run phone` binds the bridge to `127.0.0.1` and omits the token. For intentional tokenless LAN debugging on a trusted private network, add `PHONE_DEBUG_BIND=lan`.
