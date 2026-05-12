@@ -48,16 +48,28 @@
       </aside>
 
       <section class="workspace">
+        <header class="app-tabbar" aria-label="Codex tabs">
+          <div class="tab-strip" role="tablist" aria-label="開いているCodexサーフェス">
+            <button type="button" class="shell-tab active" role="tab" aria-selected="true">
+              <span class="tab-dot" aria-hidden="true"></span>
+              <span>Codex</span>
+            </button>
+            <button type="button" class="shell-tab" role="tab" aria-selected="false">
+              <span class="tab-dot bridge" aria-hidden="true"></span>
+              <span>Remote bridge</span>
+            </button>
+          </div>
+          <div class="title-actions">
+            <button id="connect" type="button" class="icon-button" title="再接続" aria-label="再接続">↻</button>
+            <button type="button" class="icon-button" id="menuButton" title="右パネルを開閉" aria-label="右パネルを開閉">…</button>
+          </div>
+        </header>
         <header class="titlebar">
           <button type="button" class="mobile-toggle" id="mobileThreads">チャット</button>
           <div class="title-stack">
             <span class="title-kicker">Remote Desktop Surface</span>
             <h1 id="threadTitle">Codex Remote</h1>
             <p id="meta">接続準備中</p>
-          </div>
-          <div class="title-actions">
-            <button id="connect" type="button" class="icon-button" title="再接続" aria-label="再接続">↻</button>
-            <button type="button" class="icon-button" id="menuButton" title="右パネルを開閉" aria-label="右パネルを開閉">…</button>
           </div>
         </header>
 
@@ -109,30 +121,37 @@
           </section>
 
           <aside class="artifact-panel" aria-label="アーティファクト">
-            <section class="panel-card">
-              <div class="panel-title">
+            <div class="dock-shell">
+              <div class="dock-tabs" aria-label="右パネル">
+                <button type="button" class="dock-tab active">Files</button>
+                <button type="button" class="dock-tab">Run</button>
+                <button type="button" class="dock-tab">Sources</button>
+              </div>
+              <section class="dock-section">
+                <div class="panel-title">
                 <span id="artifactTitle">アーティファクト</span>
                 <button type="button" class="panel-close" id="closePanelButton" title="閉じる" aria-label="アーティファクトを閉じる">×</button>
-              </div>
-              <div id="artifactList">
-                <button type="button" class="artifact-row" data-artifact="README.md">README.md</button>
-                <button type="button" class="artifact-row" data-artifact="AGENTS.md">AGENTS.md</button>
-              </div>
-              <div id="artifactPreview" class="artifact-preview hidden"></div>
-            </section>
-            <section class="panel-card">
-              <div class="panel-title">
-                <span>バックグラウンド ターミナル</span>
-                <span>▪</span>
-              </div>
-              <div id="terminalList">
-                <button type="button" class="terminal-row" id="statusButton">npm run phone</button>
-              </div>
-            </section>
-            <section class="panel-card">
-              <div class="panel-title">情報源</div>
-              <button type="button" class="source-row" id="webSearchButton">ウェブ検索</button>
-            </section>
+                </div>
+                <div id="artifactList">
+                  <button type="button" class="artifact-row" data-artifact="README.md">README.md</button>
+                  <button type="button" class="artifact-row" data-artifact="AGENTS.md">AGENTS.md</button>
+                </div>
+                <div id="artifactPreview" class="artifact-preview hidden"></div>
+              </section>
+              <section class="dock-section compact">
+                <div class="panel-title">
+                  <span>バックグラウンド ターミナル</span>
+                  <span>▪</span>
+                </div>
+                <div id="terminalList">
+                  <button type="button" class="terminal-row" id="statusButton">npm run phone</button>
+                </div>
+              </section>
+              <section class="dock-section compact">
+                <div class="panel-title">情報源</div>
+                <button type="button" class="source-row" id="webSearchButton">ウェブ検索</button>
+              </section>
+            </div>
           </aside>
         </div>
       </section>

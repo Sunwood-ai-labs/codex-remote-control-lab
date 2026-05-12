@@ -581,26 +581,85 @@ button.project-heading.active {
 
 .workspace {
   display: grid;
-  grid-template-rows: 58px minmax(0, 1fr);
+  grid-template-rows: 36px 52px minmax(0, 1fr);
   height: 100vh;
   height: 100svh;
   min-height: 0;
   min-width: 0;
+  max-width: 100vw;
   overflow: hidden;
   background:
     linear-gradient(180deg, color-mix(in srgb, var(--surface-raised) 58%, transparent), transparent 140px),
     var(--bg);
 }
 
+.app-tabbar,
 .titlebar {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
   gap: 12px;
-  padding: 0 18px;
   border-bottom: 1px solid var(--line);
   background: color-mix(in srgb, var(--card) 70%, transparent);
   backdrop-filter: blur(12px);
+}
+
+.app-tabbar {
+  grid-template-columns: minmax(0, 1fr) auto;
+  padding: 0 10px 0 8px;
+}
+
+.tab-strip {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  height: 100%;
+  gap: 3px;
+  overflow: hidden;
+}
+
+.shell-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  max-width: 164px;
+  height: 28px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  padding: 0 10px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.shell-tab span:last-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.shell-tab.active {
+  border-color: var(--line);
+  background: var(--card);
+  color: var(--nav-text);
+  box-shadow: 0 1px 0 color-mix(in srgb, #fff 70%, transparent) inset;
+}
+
+.tab-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--state-ready);
+}
+
+.tab-dot.bridge {
+  background: var(--state-running);
+}
+
+.titlebar {
+  padding: 0 18px;
 }
 
 .mobile-toggle {
@@ -648,12 +707,12 @@ p {
 
 .title-actions {
   display: flex;
-  gap: 8px;
+  gap: 6px;
 }
 
 .icon-button {
-  min-width: 34px;
-  height: 34px;
+  min-width: 28px;
+  height: 28px;
   border: 1px solid var(--line);
   border-radius: var(--compact-radius);
   background: var(--card);
@@ -686,12 +745,34 @@ body.hide-artifacts .artifact-panel {
   overflow: hidden;
 }
 
+.conversation::before,
+.conversation::after {
+  content: "";
+  pointer-events: none;
+  position: absolute;
+  z-index: 3;
+  left: 0;
+  right: 0;
+}
+
+.conversation::before {
+  top: 0;
+  height: 20px;
+  background: linear-gradient(180deg, var(--bg), transparent);
+}
+
+.conversation::after {
+  bottom: 0;
+  height: 210px;
+  background: linear-gradient(0deg, var(--bg) 12%, color-mix(in srgb, var(--bg) 92%, transparent) 62%, transparent);
+}
+
 .log {
   flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
-  padding: 26px clamp(18px, 6vw, 128px) 16px;
+  padding: 28px clamp(18px, 6vw, 128px) 210px;
   touch-action: pan-y;
   -webkit-overflow-scrolling: touch;
 }
@@ -937,13 +1018,17 @@ body.hide-artifacts .artifact-panel {
 }
 
 .approval {
-  flex: 0 0 auto;
+  position: absolute;
+  z-index: 8;
+  bottom: 184px;
+  left: 50%;
   width: min(var(--message-width), calc(100% - 48px));
-  margin: 0 auto 12px;
+  margin: 0;
   padding: 14px;
   border: 1px solid var(--warning-line);
   border-radius: var(--compact-radius);
   background: var(--warning-bg);
+  transform: translateX(-50%);
 }
 
 .approval pre {
@@ -957,12 +1042,16 @@ body.hide-artifacts .artifact-panel {
 }
 
 .run-state {
+  position: absolute;
+  z-index: 8;
+  bottom: 174px;
+  left: 50%;
   display: inline-flex;
   align-items: center;
   gap: 8px;
   width: min(var(--message-width), calc(100% - 48px));
   min-height: 28px;
-  margin: 0 auto 8px;
+  margin: 0;
   border: 1px solid var(--line);
   border-radius: 999px;
   padding: 0 12px;
@@ -970,6 +1059,7 @@ body.hide-artifacts .artifact-panel {
   color: var(--muted);
   font-size: 12px;
   font-weight: 500;
+  transform: translateX(-50%);
 }
 
 .run-state-dot {
@@ -1071,17 +1161,21 @@ body.hide-artifacts .artifact-panel {
 }
 
 .composer {
-  position: relative;
+  position: absolute;
+  z-index: 9;
+  bottom: max(18px, env(safe-area-inset-bottom));
+  left: 50%;
   flex: 0 0 auto;
   width: min(800px, calc(100% - 40px));
   min-height: 108px;
-  margin: 0 auto max(18px, env(safe-area-inset-bottom));
+  margin: 0;
   border: 1px solid var(--composer-border);
   border-radius: 14px;
   background: var(--composer-bg);
   box-shadow: var(--composer-shadow);
   backdrop-filter: blur(18px);
   overflow: visible;
+  transform: translateX(-50%);
 }
 
 .composer::before {
@@ -1348,22 +1442,78 @@ textarea::placeholder {
 }
 
 .artifact-panel {
-  display: grid;
-  align-content: start;
-  gap: 10px;
-  padding: 14px;
+  display: flex;
+  min-height: 0;
+  padding: 10px;
   border-left: 1px solid var(--line);
-  background: var(--panel);
-  overflow-y: auto;
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--panel) 85%, transparent), var(--panel)),
+    var(--panel);
+  overflow: hidden;
 }
 
-.panel-card {
+.dock-shell {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--card) 94%, transparent);
+  box-shadow:
+    0 18px 46px color-mix(in srgb, var(--text) 8%, transparent),
+    inset 0 1px 0 color-mix(in srgb, #fff 72%, transparent);
+  overflow: hidden;
+}
+
+.dock-tabs {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 2px;
+  flex: 0 0 auto;
+  padding: 6px;
+  border-bottom: 1px solid var(--line);
+  background: color-mix(in srgb, var(--soft) 76%, transparent);
+}
+
+.dock-tab {
+  min-width: 0;
+  min-height: 28px;
+  border: 0;
+  border-radius: 7px;
+  padding: 0 7px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.dock-tab.active {
+  background: var(--card);
+  color: var(--nav-text);
+  box-shadow: 0 1px 0 color-mix(in srgb, #fff 70%, transparent) inset;
+}
+
+.dock-section {
   min-width: 0;
   padding: 12px;
-  border: 1px solid var(--line);
-  border-radius: var(--compact-radius);
-  background: var(--card);
-  box-shadow: 0 8px 22px color-mix(in srgb, var(--text) 4%, transparent);
+  border-bottom: 1px solid var(--line);
+}
+
+.dock-section:first-of-type {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+}
+
+.dock-section.compact {
+  flex: 0 0 auto;
+  background: color-mix(in srgb, var(--soft) 46%, transparent);
+}
+
+.dock-section:last-child {
+  border-bottom: 0;
 }
 
 .panel-title {
@@ -1439,7 +1589,7 @@ textarea::placeholder {
 }
 
 .artifact-browser-list {
-  max-height: min(38vh, 360px);
+  max-height: min(46vh, 420px);
   overflow: auto;
   padding-right: 4px;
 }
@@ -1943,14 +2093,14 @@ textarea::placeholder {
   }
 
   .composer {
-    width: calc(100% - 18px);
+    width: calc(100vw - 18px);
     min-height: 84px;
     margin-bottom: max(7px, env(safe-area-inset-bottom));
     border-radius: 12px;
   }
 
   .run-state {
-    width: calc(100% - 18px);
+    width: calc(100vw - 18px);
     min-height: 30px;
     margin-bottom: 7px;
     padding: 0 11px;
@@ -2051,6 +2201,12 @@ textarea::placeholder {
 }
 
 @media (max-width: 520px) {
+  .app-tabbar,
+  .titlebar {
+    width: 100vw;
+    max-width: 100vw;
+  }
+
   .titlebar {
     gap: 6px;
     position: relative;
