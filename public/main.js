@@ -54,7 +54,7 @@ if (params.has("token") && window.history?.replaceState) {
 
 const themeOptions = [
   { id: "simple", name: "シンプル", detail: "静かなローカルコンソール" },
-  { id: "cyberpunk", name: "サイバーパンク", detail: "ネオンシアン + マゼンタ / 黒背景" },
+  { id: "cyberpunk", name: "サイバーパンク", detail: "緑の端末文字 / 流れるコード背景" },
   { id: "botanical", name: "ボタニカル", detail: "グリーン / 温かみのあるクリーム" },
   { id: "stigmata", name: "Stigmata", detail: "氷青 / 銀白 / 赤い販売機の残光" },
 ];
