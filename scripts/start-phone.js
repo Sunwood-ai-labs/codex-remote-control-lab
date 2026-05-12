@@ -122,6 +122,56 @@ function createUpstreamWebSocket() {
   });
 }
 
+function parseMaybeJson(value) {
+  if (typeof value !== "string") return value;
+  const trimmed = value.trim();
+  if (!trimmed.startsWith("{") && !trimmed.startsWith("[")) return value;
+  try {
+    return JSON.parse(trimmed);
+  } catch {
+    return value;
+  }
+}
+
+function pickCodexError(raw) {
+  const value = parseMaybeJson(raw);
+  if (!value || typeof value !== "object") return { message: String(raw || "Codex error") };
+  if (value.error) return { ...value.error, threadId: value.threadId, turnId: value.turnId };
+  if (value.params?.error) return { ...value.params.error, threadId: value.params.threadId, turnId: value.params.turnId };
+  return value;
+}
+
+function normalizeCodexProblem(raw) {
+  const problem = pickCodexError(raw);
+  const detail = typeof problem === "string" ? problem : JSON.stringify(problem);
+  const message = String(problem.message || problem.additionalDetails || "Codex connection error");
+  const streamDisconnected =
+    Boolean(problem.codexErrorInfo?.responseStreamDisconnected) || /responseStreamDisconnected|response\.completed/i.test(detail);
+  const retrying = Boolean(problem.willRetry) || /^Reconnecting\.\.\./i.test(message);
+  if (streamDisconnected && retrying) {
+    return {
+      severity: "status",
+      text: `Codex応答ストリームが一時切断されました。再接続中です。${message ? ` (${message})` : ""}`,
+      detail,
+      turnId: problem.turnId,
+    };
+  }
+  if (streamDisconnected) {
+    return {
+      severity: "error",
+      text: "Codex応答ストリームが切断されました。再接続後にもう一度送信してください。",
+      detail,
+      turnId: problem.turnId,
+    };
+  }
+  return {
+    severity: "error",
+    text: message,
+    detail,
+    turnId: problem.turnId,
+  };
+}
+
 class AppServerRpcClient {
   constructor() {
     this.upstream = null;
@@ -744,7 +794,27 @@ class SharedBridge {
     if (client.readyState === WebSocket.OPEN) client.send(JSON.stringify({ type, ...payload }));
   }
 
+  closeBrowserClients() {
+    for (const client of this.clients) {
+      if (client.readyState === WebSocket.OPEN) client.close();
+    }
+    this.clients.clear();
+  }
+
+  markUpstreamClosed(message = "Codex接続が切断されました。再接続してください。") {
+    this.ready = false;
+    this.activeTurnId = null;
+    this.pending.clear();
+    this.emit("error", { text: message });
+    this.closeBrowserClients();
+    bridges.delete(this.bridgeKey);
+  }
+
   request(method, params) {
+    if (!this.upstream || this.upstream.readyState !== WebSocket.OPEN) {
+      this.markUpstreamClosed();
+      return null;
+    }
     const id = this.nextId++;
     this.upstream.send(JSON.stringify({ id, method, params }));
     return id;
@@ -814,8 +884,10 @@ class SharedBridge {
       if (pendingMethod === "turn/start") {
         this.pending.delete(msg.id);
         if (msg.error) {
-          this.emit("error", { text: msg.error.message || JSON.stringify(msg.error) });
-          this.startNextQueuedTurn();
+          const problem = normalizeCodexProblem(msg.error);
+          if (problem.turnId) this.activeTurnId = problem.turnId;
+          this.emit(problem.severity, { text: problem.text, detail: problem.detail });
+          if (problem.severity === "error") this.startNextQueuedTurn();
         } else {
           this.activeTurnId = msg.result.turn.id;
           this.emit("turn", { status: "started", turnId: this.activeTurnId });
@@ -857,7 +929,9 @@ class SharedBridge {
       }
 
       if (msg.method === "error") {
-        this.emit("error", { text: msg.params.message || JSON.stringify(msg.params) });
+        const problem = normalizeCodexProblem(msg.params);
+        if (problem.turnId) this.activeTurnId = problem.turnId;
+        this.emit(problem.severity, { text: problem.text, detail: problem.detail });
         return;
       }
 
@@ -870,7 +944,7 @@ class SharedBridge {
     });
     this.upstream.on("close", () => {
       if (!this.ready) this.startupFailed = true;
-      this.emit("status", { text: "Codex接続が閉じました" });
+      this.markUpstreamClosed("Codex接続が閉じました。再接続ボタンを押してください。");
     });
   }
 
@@ -930,6 +1004,7 @@ class SharedBridge {
     const id = this.request("turn/start", {
       ...params,
     });
+    if (!id) return;
     this.pending.set(id, "turn/start");
     const displayText = savedImages.length ? `${text}\n\n添付: ${savedImages.map((image) => image.name).join(", ")}` : text;
     this.appendHistory({ type: "user", text: displayText, attachments: savedImages });
@@ -951,6 +1026,10 @@ class SharedBridge {
       result = { decision: accept ? "accept" : "decline" };
     } else {
       result = accept ? { decision: "accept" } : { decision: "decline" };
+    }
+    if (!this.upstream || this.upstream.readyState !== WebSocket.OPEN) {
+      this.markUpstreamClosed();
+      return;
     }
     this.upstream.send(JSON.stringify({ id: requestMsg.id, result }));
     this.emit("status", { text: accept ? "承認しました" : "拒否しました" });
