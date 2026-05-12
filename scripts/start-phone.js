@@ -9,6 +9,7 @@ const WebSocket = require("ws");
 const { bridgeKeyForRequest, shouldDisposeIdleBridge, shouldPromoteBridgeKey } = require("./bridge-state");
 const { isHistorySyncEnabled, runHistorySync } = require("./history-sync");
 const { bridgeUrls, notifyBridgeUrls } = require("./phone-notify");
+const { findLiveBridge, readThreadSnapshot } = require("./thread-read");
 
 const root = path.resolve(__dirname, "..");
 
@@ -421,6 +422,7 @@ class SharedBridge {
     this.threadId = null;
     this.activeTurnId = null;
     this.ready = false;
+    this.startupFailed = false;
     this.history = [];
     this.turnQueue = [];
     this.upstream = createUpstreamWebSocket();
@@ -517,10 +519,12 @@ class SharedBridge {
       if (pendingMethod === "thread/start" || pendingMethod === "thread/resume") {
         this.pending.delete(msg.id);
         if (msg.error) {
+          this.startupFailed = true;
           this.emit("error", { text: msg.error.message || JSON.stringify(msg.error) });
           return;
         }
         this.threadId = msg.result.thread.id;
+        this.startupFailed = false;
         this.promoteBridgeKey();
         this.ready = true;
         this.history = historyFromThread(msg.result.thread);
@@ -582,8 +586,14 @@ class SharedBridge {
       this.emit("event", { event: msg });
     });
 
-    this.upstream.on("error", (error) => this.emit("error", { text: error.message }));
-    this.upstream.on("close", () => this.emit("status", { text: "Codex接続が閉じました" }));
+    this.upstream.on("error", (error) => {
+      if (!this.ready) this.startupFailed = true;
+      this.emit("error", { text: error.message });
+    });
+    this.upstream.on("close", () => {
+      if (!this.ready) this.startupFailed = true;
+      this.emit("status", { text: "Codex接続が閉じました" });
+    });
   }
 
   prompt(text, attachments = [], options = {}) {
@@ -813,24 +823,15 @@ async function main() {
         return;
       }
       try {
-        let thread;
-        try {
-          const result = await appServerRequest("thread/read", {
-            threadId,
-            includeTurns: true,
-          });
-          thread = result.thread || result;
-        } catch (readError) {
-          const result = await appServerRequest("thread/resume", {
-            threadId,
-            model,
-            cwd: workdir,
-            approvalPolicy: "on-request",
-            sandbox: "workspace-write",
-          });
-          thread = result.thread;
-        }
-        sendJson(res, 200, { threadId: thread.id || threadId, history: historyFromThread(thread) });
+        const snapshot = await readThreadSnapshot({
+          threadId,
+          liveBridge: findLiveBridge(bridges, threadId),
+          request: appServerRequest,
+          model,
+          workdir,
+          historyFromThread,
+        });
+        sendJson(res, 200, snapshot);
       } catch (error) {
         sendJson(res, 500, { error: error.message });
       }
