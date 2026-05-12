@@ -43,9 +43,14 @@ const params = new URLSearchParams(location.search);
 const token = params.get("token") || localStorage.getItem("codexPhoneToken") || "";
 let selectedThread = params.get("thread") || "";
 if (token) localStorage.setItem("codexPhoneToken", token);
+if (params.has("token") && window.history?.replaceState) {
+  const cleanUrl = new URL(location.href);
+  cleanUrl.searchParams.delete("token");
+  window.history.replaceState({}, document.title, cleanUrl);
+}
 
 const themeOptions = [
-  { id: "simple", name: "シンプル", detail: "ホワイト / Codex Light 風" },
+  { id: "simple", name: "シンプル", detail: "静かなローカルコンソール" },
   { id: "cyberpunk", name: "サイバーパンク", detail: "ネオンシアン + マゼンタ / 黒背景" },
   { id: "botanical", name: "ボタニカル", detail: "グリーン / 温かみのあるクリーム" },
 ];
@@ -111,9 +116,11 @@ const accessModes = [
 
 function updateModelButton() {
   modelButton.textContent = `${selectedModelLabel} ${selectedReasoning}`;
+  modelButton.setAttribute("aria-label", `モデル ${selectedModelLabel}、インテリジェンス ${selectedReasoning}`);
   for (const row of modelMenu.querySelectorAll("[data-reasoning]")) {
     const active = row.dataset.reasoning === selectedReasoning;
     row.classList.toggle("active", active);
+    row.setAttribute("aria-checked", String(active));
     let mark = row.querySelector(".checkmark");
     if (active && !mark) {
       mark = document.createElement("span");
@@ -125,17 +132,24 @@ function updateModelButton() {
     }
   }
   for (const row of modelMenu.querySelectorAll("[data-model-choice]")) {
-    row.classList.toggle("active", row.dataset.modelChoice === selectedModel);
+    const active = row.dataset.modelChoice === selectedModel;
+    row.classList.toggle("active", active);
+    row.setAttribute("aria-checked", String(active));
   }
 }
 
 function closeModelMenu() {
   modelMenu.classList.add("hidden");
+  modelButton.setAttribute("aria-expanded", "false");
+  thinkingButton.setAttribute("aria-expanded", "false");
 }
 
 function toggleModelMenu() {
   updateModelButton();
   modelMenu.classList.toggle("hidden");
+  const expanded = String(!modelMenu.classList.contains("hidden"));
+  modelButton.setAttribute("aria-expanded", expanded);
+  thinkingButton.setAttribute("aria-expanded", expanded);
 }
 
 function selectReasoning(value) {
@@ -799,7 +813,8 @@ function renderArtifactRows() {
   artifactList.replaceChildren();
   for (const item of artifactItems) {
     const icon = item.kind === "image" ? "画像" : item.kind === "markdown" ? "MD" : "FILE";
-    const row = addPanelRow(item.name, `${icon} · ${item.path}`, () => showArtifact(item.path));
+    const label = item.name || item.path?.split(/[\\/]/).filter(Boolean).pop() || "artifact";
+    const row = addPanelRow(label, `${icon} · ${item.path || ""}`, () => showArtifact(item.path));
     row.classList.toggle("active", item.path === activeArtifactPath);
   }
   if (!artifactItems.length) addPanelRow("アーティファクトは見つかりませんでした");
@@ -1043,6 +1058,7 @@ function renderAttachments() {
     const chip = document.createElement("button");
     chip.type = "button";
     chip.className = "attachment-chip";
+    chip.setAttribute("aria-label", `${file.name} の添付を削除`);
     const thumb = document.createElement("img");
     thumb.src = file.dataUrl;
     thumb.alt = "";
@@ -1212,9 +1228,11 @@ menuButton.addEventListener("click", () => {
   const mobilePanelVisible = document.body.classList.contains("show-panel");
   if (desktopPanelVisible || mobilePanelVisible) {
     closeRightPanel();
+    menuButton.setAttribute("aria-pressed", "false");
     addStatus("右パネルを閉じました。");
   } else {
     showRightPanel();
+    menuButton.setAttribute("aria-pressed", "true");
     addStatus("右パネルを開きました。");
   }
 });
@@ -1265,6 +1283,11 @@ document.addEventListener("click", (event) => {
   if (modelMenu.contains(event.target) || modelButton.contains(event.target) || thinkingButton.contains(event.target)) return;
   closeModelMenu();
 });
+document.addEventListener("keydown", (event) => {
+  if (event.key !== "Escape" || modelMenu.classList.contains("hidden")) return;
+  closeModelMenu();
+  modelButton.focus();
+});
 statusButton.addEventListener("click", showStatus);
 webSearchButton.addEventListener("click", () => {
   promptInput.value = `${promptInput.value}${promptInput.value ? "\n" : ""}Web調査を使って確認してください。`;
@@ -1279,6 +1302,11 @@ for (const button of artifactButtons) {
 
 setReady(false);
 updateModelButton();
+modelButton.setAttribute("aria-haspopup", "menu");
+modelButton.setAttribute("aria-expanded", "false");
+thinkingButton.setAttribute("aria-haspopup", "menu");
+thinkingButton.setAttribute("aria-expanded", "false");
+menuButton.setAttribute("aria-pressed", window.matchMedia("(min-width: 1101px)").matches ? "true" : "false");
 loadArtifacts();
 loadThreads().catch(() => {}).finally(connect);
 setInterval(() => loadThreads({ background: true }), 10_000);

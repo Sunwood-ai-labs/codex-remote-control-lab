@@ -15,30 +15,49 @@
     <main class="app-shell">
       <button type="button" class="sidebar-scrim" id="sidebarScrim" aria-label="チャット一覧を閉じる"></button>
       <aside class="sidebar" aria-label="スレッド">
+        <div class="brand-card" aria-label="OCdex local bridge">
+          <div class="brand-mark" aria-hidden="true">OC</div>
+          <div class="brand-copy">
+            <strong>OCdex</strong>
+            <span>Local bridge console</span>
+          </div>
+          <span class="brand-status">LAN</span>
+        </div>
         <nav class="primary-nav">
-          <button type="button" class="nav-command" id="newThread">新しいチャット</button>
-          <button type="button" class="nav-command muted" id="searchButton">検索</button>
-          <button type="button" class="nav-command muted" id="pluginsButton">プラグイン</button>
-          <button type="button" class="nav-command muted" id="automationsButton">オートメーション</button>
+          <button type="button" class="nav-command" id="newThread" aria-label="新しいチャットを開始">
+            <span class="command-icon" aria-hidden="true">+</span><span>新しいチャット</span>
+          </button>
+          <button type="button" class="nav-command muted" id="searchButton" aria-label="チャットを検索">
+            <span class="command-icon" aria-hidden="true">⌕</span><span>検索</span>
+          </button>
+          <button type="button" class="nav-command muted" id="pluginsButton" aria-label="プラグインを表示">
+            <span class="command-icon" aria-hidden="true">◇</span><span>プラグイン</span>
+          </button>
+          <button type="button" class="nav-command muted" id="automationsButton" aria-label="オートメーションを表示">
+            <span class="command-icon" aria-hidden="true">⟳</span><span>オートメーション</span>
+          </button>
         </nav>
         <div class="thread-section">
           <div class="section-title">最近のチャット</div>
-          <input id="threadSearch" class="thread-search hidden" type="search" placeholder="チャットを検索" />
+          <input id="threadSearch" class="thread-search hidden" type="search" placeholder="チャットを検索" aria-label="チャットを検索" />
           <div id="threadList" class="thread-list"></div>
         </div>
-        <button type="button" class="settings" id="settingsButton">設定</button>
+        <button type="button" class="settings" id="settingsButton" aria-label="設定を表示">
+          <span class="command-icon" aria-hidden="true">⚙</span><span>設定</span>
+        </button>
       </aside>
 
       <section class="workspace">
         <header class="titlebar">
           <button type="button" class="mobile-toggle" id="mobileThreads">チャット</button>
           <div class="title-stack">
+            <span class="title-kicker">Remote Desktop Surface</span>
             <h1 id="threadTitle">Codex Remote</h1>
             <p id="meta">接続準備中</p>
           </div>
           <div class="title-actions">
-            <button id="connect" type="button" class="icon-button" title="再接続">↻</button>
-            <button type="button" class="icon-button" id="menuButton" title="メニュー">…</button>
+            <button id="connect" type="button" class="icon-button" title="再接続" aria-label="再接続">↻</button>
+            <button type="button" class="icon-button" id="menuButton" title="右パネルを開閉" aria-label="右パネルを開閉">…</button>
           </div>
         </header>
 
@@ -62,29 +81,29 @@
             <form id="composer" class="composer">
               <input id="fileInput" class="hidden" type="file" accept="image/*" multiple />
               <div id="attachments" class="attachments" aria-live="polite"></div>
-              <textarea id="prompt" rows="3" placeholder="フォローアップの変更を求める"></textarea>
+              <textarea id="prompt" rows="3" placeholder="フォローアップの変更を求める" aria-label="Codex へのメッセージ"></textarea>
               <div class="composer-footer">
                 <div class="composer-left">
-                  <button type="button" class="ghost-button" id="addButton">＋</button>
+                  <button type="button" class="ghost-button" id="addButton" aria-label="画像を添付">＋</button>
                   <button type="button" class="access-button" id="accessButton">フルアクセス⌄</button>
                 </div>
                 <div class="composer-right">
-                  <button type="button" class="thinking-button" id="thinkingButton" title="インテリジェンス"></button>
+                  <button type="button" class="thinking-button" id="thinkingButton" title="インテリジェンス" aria-label="インテリジェンスを選択"></button>
                   <button type="button" id="modelButton" class="model-button">5.5 中⌄</button>
                   <button type="button" class="voice-button" id="voiceButton" title="音声入力" aria-label="音声入力"></button>
-                  <button id="send" type="submit" class="send-button" title="送信">↑</button>
+                  <button id="send" type="submit" class="send-button" title="送信" aria-label="送信">↑</button>
                 </div>
               </div>
               <div id="modelMenu" class="model-menu hidden" role="menu" aria-label="モデルとインテリジェンス">
                 <div class="model-menu-label">インテリジェンス</div>
-                <button type="button" class="model-menu-row" data-reasoning="低">低</button>
-                <button type="button" class="model-menu-row" data-reasoning="中">中<span class="checkmark">✓</span></button>
-                <button type="button" class="model-menu-row" data-reasoning="高">高</button>
-                <button type="button" class="model-menu-row" data-reasoning="非常に高">非常に高</button>
+                <button type="button" class="model-menu-row" data-reasoning="低" role="menuitemradio" aria-checked="false">低</button>
+                <button type="button" class="model-menu-row" data-reasoning="中" role="menuitemradio" aria-checked="true">中<span class="checkmark">✓</span></button>
+                <button type="button" class="model-menu-row" data-reasoning="高" role="menuitemradio" aria-checked="false">高</button>
+                <button type="button" class="model-menu-row" data-reasoning="非常に高" role="menuitemradio" aria-checked="false">非常に高</button>
                 <div class="model-menu-separator"></div>
-                <button type="button" class="model-menu-row submenu-row" data-model-choice="gpt-5.5">GPT-5.5<span class="chevron">›</span></button>
-                <button type="button" class="model-menu-row submenu-row" data-model-choice="gpt-5.4">GPT-5.4<span class="chevron">›</span></button>
-                <button type="button" class="model-menu-row submenu-row" id="moreModelsButton">その他のモデル<span class="chevron">›</span></button>
+                <button type="button" class="model-menu-row submenu-row" data-model-choice="gpt-5.5" role="menuitemradio" aria-checked="false">GPT-5.5<span class="chevron">›</span></button>
+                <button type="button" class="model-menu-row submenu-row" data-model-choice="gpt-5.4" role="menuitemradio" aria-checked="false">GPT-5.4<span class="chevron">›</span></button>
+                <button type="button" class="model-menu-row submenu-row" id="moreModelsButton" role="menuitem">その他のモデル<span class="chevron">›</span></button>
               </div>
             </form>
           </section>
