@@ -28,6 +28,11 @@ v0.3.0 turns the phone bridge into a much closer desktop-style Codex control sur
 - Adds the image-backed Stigmata theme.
 - Refreshes README screenshots and docs assets for the four-theme comparison and updated mobile controls.
 
+## Contributors
+
+- [@Sunwood-ai-labs](https://github.com/Sunwood-ai-labs)
+- [@AgentGymLeader](https://github.com/AgentGymLeader) / kim-pomsora-com
+
 ## Validation
 
 - `npm test`
