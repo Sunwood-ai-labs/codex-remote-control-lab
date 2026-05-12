@@ -1,3 +1,6 @@
+/* =================================================================
+ * Simple (Codex Light inspired)
+ * ================================================================= */
 :root {
   color-scheme: light;
   font-family:
@@ -5,120 +8,137 @@
   background: var(--bg);
   color: var(--text);
   --bg: #ffffff;
-  --text: #181818;
-  --sidebar: #f4f4f3;
-  --sidebar-start: #f2f3f2;
-  --sidebar-end: #f7f4f0;
-  --line: #e7e7e4;
-  --muted: #777772;
-  --soft: #f7f7f5;
+  --text: #111111;
+  --sidebar: #f5f5f5;
+  --sidebar-start: #f5f5f5;
+  --sidebar-end: #f5f5f5;
+  --line: #e5e5e5;
+  --muted: #8f8f8f;
+  --soft: #f7f7f7;
   --card: #ffffff;
-  --panel: #fbfbfa;
-  --accent: #ff5d22;
-  --button: #202020;
+  --panel: #fafafa;
+  --accent: #0169cc;
+  --button: #0169cc;
   --button-text: #ffffff;
-  --nav-text: #343433;
-  --nav-muted: #464641;
-  --hover: rgba(0, 0, 0, 0.055);
-  --field: rgba(255, 255, 255, 0.84);
-  --entry: #22221f;
-  --avatar: #f0f0ed;
-  --avatar-text: #777772;
-  --code-bg: #efefec;
-  --code-text: #272724;
-  --quote: #d9d9d4;
-  --link: #0b65c2;
-  --composer-bg: rgba(255, 255, 255, 0.96);
-  --composer-border: #dadad6;
-  --composer-shadow: 0 16px 38px rgba(0, 0, 0, 0.08);
-  --scrim: rgba(0, 0, 0, 0.12);
+  --nav-text: #111111;
+  --nav-muted: #555555;
+  --hover: rgba(0, 0, 0, 0.05);
+  --field: rgba(255, 255, 255, 0.9);
+  --entry: #111111;
+  --avatar: #ececec;
+  --avatar-text: #8f8f8f;
+  --code-bg: #f0f0f0;
+  --code-text: #1a1a1a;
+  --quote: #d0d0d0;
+  --link: #0169cc;
+  --composer-bg: rgba(255, 255, 255, 0.97);
+  --composer-border: #e0e0e0;
+  --composer-shadow: 0 12px 32px rgba(0, 0, 0, 0.07);
+  --scrim: rgba(0, 0, 0, 0.1);
   --warning-line: #f0b36b;
   --warning-bg: #fff8ed;
   --warning-text: #5b4632;
-  --error: #b33122;
-  --state-ready: #266b42;
-  --state-running: #0b65c2;
+  --error: #c0392b;
+  --state-ready: #00a240;
+  --state-running: #0169cc;
   --state-approval: #8f4c00;
 }
 
+/* =================================================================
+ * Cyberpunk — neon cyan / magenta on near-black
+ * ================================================================= */
 :root[data-theme="cyberpunk"] {
   color-scheme: dark;
-  --bg: #080910;
-  --text: #edf7ff;
-  --sidebar: #0d0f1d;
-  --sidebar-start: #111827;
-  --sidebar-end: #111018;
-  --line: rgba(94, 234, 212, 0.24);
-  --muted: #8ea4b5;
-  --soft: rgba(94, 234, 212, 0.1);
-  --card: rgba(13, 16, 30, 0.94);
-  --panel: #0a0c16;
-  --accent: #ff4fd8;
-  --button: #5eead4;
-  --button-text: #051014;
-  --nav-text: #e8fbff;
-  --nav-muted: #a3b9c9;
-  --hover: rgba(255, 79, 216, 0.13);
-  --field: rgba(12, 18, 32, 0.9);
-  --entry: #e9f7ff;
-  --avatar: rgba(94, 234, 212, 0.16);
-  --avatar-text: #9ff8ec;
-  --code-bg: rgba(255, 79, 216, 0.12);
-  --code-text: #ffd8f5;
-  --quote: rgba(94, 234, 212, 0.45);
-  --link: #5eead4;
-  --composer-bg: rgba(9, 13, 24, 0.96);
-  --composer-border: rgba(255, 79, 216, 0.34);
-  --composer-shadow: 0 16px 42px rgba(255, 79, 216, 0.14);
-  --scrim: rgba(0, 0, 0, 0.42);
-  --warning-line: rgba(255, 176, 74, 0.45);
-  --warning-bg: rgba(255, 176, 74, 0.1);
-  --warning-text: #ffd89b;
-  --error: #ff7a9b;
-  --state-ready: #5eead4;
-  --state-running: #7dd3fc;
-  --state-approval: #fbbf24;
+  font-family:
+    "JetBrains Mono", "Cascadia Code", "Fira Code", ui-monospace,
+    "SFMono-Regular", Menlo, monospace;
+  --bg: #080b14;
+  --text: #e2f0ff;
+  --sidebar: #060910;
+  --sidebar-start: #060910;
+  --sidebar-end: #060910;
+  --line: rgba(0, 255, 231, 0.18);
+  --muted: #6a8ca8;
+  --soft: rgba(0, 255, 231, 0.08);
+  --card: rgba(8, 12, 22, 0.96);
+  --panel: #070a13;
+  --accent: #df6cff;
+  --button: #00ffe7;
+  --button-text: #080b14;
+  --nav-text: #c8e8ff;
+  --nav-muted: #7a9db8;
+  --hover: rgba(0, 255, 231, 0.1);
+  --field: rgba(6, 10, 20, 0.92);
+  --entry: #daf0ff;
+  --avatar: rgba(0, 255, 231, 0.14);
+  --avatar-text: #00ffe7;
+  --code-bg: rgba(223, 108, 255, 0.1);
+  --code-text: #f8c8ff;
+  --quote: rgba(0, 255, 231, 0.38);
+  --link: #00ffe7;
+  --composer-bg: rgba(6, 10, 20, 0.97);
+  --composer-border: rgba(0, 255, 231, 0.28);
+  --composer-shadow: 0 0 0 1px rgba(0, 255, 231, 0.12), 0 20px 48px rgba(0, 255, 231, 0.08);
+  --scrim: rgba(0, 0, 0, 0.6);
+  --warning-line: rgba(255, 200, 64, 0.5);
+  --warning-bg: rgba(255, 200, 64, 0.08);
+  --warning-text: #ffe48a;
+  --error: #ff5577;
+  --state-ready: #00ffe7;
+  --state-running: #00ffe7;
+  --state-approval: #ffcc44;
+  /* neon glow tokens */
+  --glow-cyan: 0 0 8px rgba(0, 255, 231, 0.7), 0 0 20px rgba(0, 255, 231, 0.35);
+  --glow-magenta: 0 0 8px rgba(223, 108, 255, 0.7), 0 0 20px rgba(223, 108, 255, 0.35);
 }
 
+/* =================================================================
+ * Botanical — warm green / cream nature theme
+ * ================================================================= */
 :root[data-theme="botanical"] {
   color-scheme: light;
-  --bg: #fbfaf2;
-  --text: #1f2c22;
-  --sidebar: #eef3e6;
-  --sidebar-start: #e8f0dc;
-  --sidebar-end: #f8f5e8;
-  --line: #d9decf;
-  --muted: #69725f;
-  --soft: #eef4e7;
-  --card: #fffdf4;
-  --panel: #f6f7ed;
-  --accent: #3f7f4b;
-  --button: #244a2f;
-  --button-text: #fffdf4;
-  --nav-text: #2d3d31;
-  --nav-muted: #596850;
-  --hover: rgba(63, 127, 75, 0.12);
-  --field: rgba(255, 253, 244, 0.88);
-  --entry: #253126;
-  --avatar: #e1ead8;
-  --avatar-text: #59704e;
-  --code-bg: #e8eddd;
-  --code-text: #253126;
-  --quote: #a8b897;
-  --link: #2f6f45;
-  --composer-bg: rgba(255, 253, 244, 0.96);
-  --composer-border: #cad5be;
-  --composer-shadow: 0 16px 38px rgba(56, 84, 50, 0.12);
-  --scrim: rgba(36, 74, 47, 0.18);
-  --warning-line: #d8a255;
-  --warning-bg: #fff5dc;
+  font-family:
+    ui-sans-serif, -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", sans-serif;
+  --bg: #faf9f0;
+  --text: #1c2b1f;
+  --sidebar: #eef2e6;
+  --sidebar-start: #eef2e6;
+  --sidebar-end: #eef2e6;
+  --line: #d6dece;
+  --muted: #647558;
+  --soft: #edf3e5;
+  --card: #fffef5;
+  --panel: #f5f7ee;
+  --accent: #2e7d4a;
+  --button: #2e7d4a;
+  --button-text: #fffef5;
+  --nav-text: #1c2b1f;
+  --nav-muted: #4d6040;
+  --hover: rgba(46, 125, 74, 0.1);
+  --field: rgba(255, 254, 245, 0.9);
+  --entry: #1c2b1f;
+  --avatar: #dce8d2;
+  --avatar-text: #4d6040;
+  --code-bg: #e4edd8;
+  --code-text: #1c2b1f;
+  --quote: #a4b896;
+  --link: #2e7d4a;
+  --composer-bg: rgba(255, 254, 245, 0.97);
+  --composer-border: #c8d6bc;
+  --composer-shadow: 0 12px 32px rgba(46, 100, 60, 0.1);
+  --scrim: rgba(30, 60, 38, 0.15);
+  --warning-line: #d4a24e;
+  --warning-bg: #fef5de;
   --warning-text: #6b4c21;
-  --error: #b14a32;
-  --state-ready: #326b3c;
-  --state-running: #2f6f9f;
-  --state-approval: #765016;
+  --error: #b14532;
+  --state-ready: #2e7d4a;
+  --state-running: #2f7aa0;
+  --state-approval: #7a5216;
 }
 
+/* =================================================================
+ * Global reset
+ * ================================================================= */
 * {
   box-sizing: border-box;
 }
@@ -127,6 +147,110 @@ body {
   margin: 0;
   background: var(--bg);
   overflow: hidden;
+}
+
+/* --- Cyberpunk scanline overlay (data-theme is on <html>) --- */
+:root[data-theme="cyberpunk"] body::before {
+  content: "";
+  pointer-events: none;
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  background: repeating-linear-gradient(
+    0deg,
+    rgba(0, 0, 0, 0.06) 0px,
+    rgba(0, 0, 0, 0.06) 1px,
+    transparent 1px,
+    transparent 3px
+  );
+}
+
+/* --- Cyberpunk neon accents --- */
+:root[data-theme="cyberpunk"] .send-button {
+  box-shadow: var(--glow-cyan);
+}
+
+:root[data-theme="cyberpunk"] .send-button:hover {
+  box-shadow: var(--glow-cyan), 0 0 32px rgba(0, 255, 231, 0.5);
+}
+
+:root[data-theme="cyberpunk"] .nav-command#newThread {
+  color: var(--button);
+  border: 1px solid rgba(0, 255, 231, 0.3);
+  background: rgba(0, 255, 231, 0.06);
+}
+
+:root[data-theme="cyberpunk"] .nav-command#newThread:hover {
+  background: rgba(0, 255, 231, 0.12);
+  box-shadow: 0 0 10px rgba(0, 255, 231, 0.2);
+}
+
+:root[data-theme="cyberpunk"] .thread-item.active {
+  color: var(--button);
+  background: rgba(0, 255, 231, 0.08);
+  border-left: 2px solid var(--button);
+  padding-left: 40px;
+}
+
+:root[data-theme="cyberpunk"] .composer {
+  border-color: rgba(0, 255, 231, 0.22);
+  transition: border-color 200ms ease, box-shadow 200ms ease;
+}
+
+:root[data-theme="cyberpunk"] .composer:focus-within {
+  border-color: rgba(0, 255, 231, 0.5);
+  box-shadow: 0 0 0 1px rgba(0, 255, 231, 0.25), 0 20px 48px rgba(0, 255, 231, 0.1);
+}
+
+:root[data-theme="cyberpunk"] textarea:focus {
+  outline: none;
+}
+
+:root[data-theme="cyberpunk"] .access-button {
+  color: var(--accent);
+  text-shadow: 0 0 8px rgba(223, 108, 255, 0.5);
+}
+
+:root[data-theme="cyberpunk"] .run-state[data-state="ready"],
+:root[data-theme="cyberpunk"] .run-state[data-state="done"] {
+  border-color: rgba(0, 255, 231, 0.35);
+  color: var(--state-ready);
+  text-shadow: 0 0 6px rgba(0, 255, 231, 0.6);
+  background: rgba(0, 255, 231, 0.06);
+}
+
+:root[data-theme="cyberpunk"] .run-state[data-state="running"],
+:root[data-theme="cyberpunk"] .run-state[data-state="streaming"],
+:root[data-theme="cyberpunk"] .run-state[data-state="connecting"] {
+  border-color: rgba(0, 255, 231, 0.35);
+  color: var(--state-running);
+  text-shadow: 0 0 6px rgba(0, 255, 231, 0.6);
+  background: rgba(0, 255, 231, 0.06);
+}
+
+:root[data-theme="cyberpunk"] .icon-button:hover {
+  border-color: rgba(0, 255, 231, 0.4);
+  color: var(--button);
+  box-shadow: 0 0 8px rgba(0, 255, 231, 0.2);
+}
+
+:root[data-theme="cyberpunk"] h1 {
+  color: var(--button);
+  text-shadow: 0 0 12px rgba(0, 255, 231, 0.35);
+}
+
+:root[data-theme="cyberpunk"] .entry-body a {
+  text-shadow: 0 0 8px rgba(0, 255, 231, 0.4);
+}
+
+:root[data-theme="cyberpunk"] .entry-body code {
+  color: var(--accent);
+  background: rgba(223, 108, 255, 0.1);
+  text-shadow: 0 0 6px rgba(223, 108, 255, 0.4);
+}
+
+:root[data-theme="cyberpunk"] .sidebar {
+  border-right-color: rgba(0, 255, 231, 0.15);
 }
 
 button,
@@ -1402,35 +1526,35 @@ textarea::placeholder {
 }
 
 [data-theme-choice="simple"] .theme-swatch span:nth-child(2) {
-  background: #f2f3f2;
+  background: #f5f5f5;
 }
 
 [data-theme-choice="simple"] .theme-swatch span:nth-child(3) {
-  background: #ff5d22;
+  background: #0169cc;
 }
 
 [data-theme-choice="cyberpunk"] .theme-swatch span:nth-child(1) {
-  background: #080910;
+  background: #080b14;
 }
 
 [data-theme-choice="cyberpunk"] .theme-swatch span:nth-child(2) {
-  background: #5eead4;
+  background: #00ffe7;
 }
 
 [data-theme-choice="cyberpunk"] .theme-swatch span:nth-child(3) {
-  background: #ff4fd8;
+  background: #df6cff;
 }
 
 [data-theme-choice="botanical"] .theme-swatch span:nth-child(1) {
-  background: #fbfaf2;
+  background: #faf9f0;
 }
 
 [data-theme-choice="botanical"] .theme-swatch span:nth-child(2) {
-  background: #3f7f4b;
+  background: #2e7d4a;
 }
 
 [data-theme-choice="botanical"] .theme-swatch span:nth-child(3) {
-  background: #d9decf;
+  background: #d6dece;
 }
 
 @media (max-width: 1100px) {

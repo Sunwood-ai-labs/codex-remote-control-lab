@@ -45,9 +45,9 @@ let selectedThread = params.get("thread") || "";
 if (token) localStorage.setItem("codexPhoneToken", token);
 
 const themeOptions = [
-  { id: "simple", name: "シンプル", detail: "ライト / クリーン" },
-  { id: "cyberpunk", name: "サイバーパンク", detail: "暗め / ネオンアクセント" },
-  { id: "botanical", name: "ボタニカル", detail: "葉色 / 紙のような柔らかさ" },
+  { id: "simple", name: "シンプル", detail: "ホワイト / Codex Light 風" },
+  { id: "cyberpunk", name: "サイバーパンク", detail: "ネオンシアン + マゼンタ / 黒背景" },
+  { id: "botanical", name: "ボタニカル", detail: "グリーン / 温かみのあるクリーム" },
 ];
 let selectedTheme = localStorage.getItem("codexPhoneTheme") || "simple";
 
