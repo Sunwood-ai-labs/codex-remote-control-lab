@@ -58,8 +58,9 @@
 :root[data-theme="cyberpunk"] {
   color-scheme: dark;
   font-family:
-    "JetBrains Mono", "Cascadia Code", "Fira Code", ui-monospace,
-    "SFMono-Regular", Menlo, monospace;
+    "OCR A Std", "OCR A", "Andale Mono", "Share Tech Mono",
+    "JetBrains Mono", "Cascadia Code", ui-monospace, "SFMono-Regular",
+    Menlo, monospace;
   --bg: #020704;
   --text: #caffc8;
   --sidebar: #020704;
@@ -271,17 +272,57 @@ body::before {
     animation: none;
     background-position: 0 -180px;
   }
+
+  :root[data-theme="cyberpunk"] .workspace::before,
+  :root[data-theme="cyberpunk"] h1,
+  :root[data-theme="cyberpunk"] .send-button,
+  :root[data-theme="cyberpunk"] .nav-command:hover,
+  :root[data-theme="cyberpunk"] .theme-option:hover {
+    animation: none;
+  }
 }
 
 :root[data-theme="cyberpunk"] .workspace {
+  position: relative;
+  isolation: isolate;
   background:
-    linear-gradient(180deg, rgba(5, 18, 10, 0.82), rgba(2, 7, 4, 0.5) 240px, rgba(2, 7, 4, 0.7)),
-    rgba(2, 7, 4, 0.5);
+    linear-gradient(180deg, rgba(5, 18, 10, 0.72), rgba(2, 7, 4, 0.36) 240px, rgba(2, 7, 4, 0.58)),
+    rgba(2, 7, 4, 0.38);
+}
+
+:root[data-theme="cyberpunk"] .workspace::before {
+  content: "";
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background:
+    linear-gradient(90deg, transparent 0 8%, rgba(98, 255, 107, 0.09) 8.5%, transparent 9.5% 22%, rgba(98, 255, 107, 0.06) 23%, transparent 24% 42%, rgba(98, 255, 107, 0.08) 43%, transparent 44% 63%, rgba(98, 255, 107, 0.05) 64%, transparent 65% 100%),
+    repeating-linear-gradient(180deg, transparent 0 20px, rgba(98, 255, 107, 0.1) 21px, transparent 23px 44px);
+  background-size: 260px 100%, 100% 88px;
+  mix-blend-mode: screen;
+  opacity: 0.2;
+  animation: cyber-column-fall 9s linear infinite;
+}
+
+@keyframes cyber-column-fall {
+  from {
+    background-position: 0 -180px, 0 -88px;
+  }
+  to {
+    background-position: 0 180px, 0 88px;
+  }
 }
 
 /* --- Cyberpunk neon accents --- */
+:root[data-theme="cyberpunk"] body {
+  letter-spacing: 0.015em;
+  text-shadow: 0 0 5px rgba(98, 255, 107, 0.2);
+}
+
 :root[data-theme="cyberpunk"] .send-button {
   box-shadow: var(--glow-cyan);
+  animation: cyber-button-pulse 2.8s ease-in-out infinite;
 }
 
 :root[data-theme="cyberpunk"] .send-button:hover {
@@ -350,7 +391,60 @@ body::before {
 
 :root[data-theme="cyberpunk"] h1 {
   color: var(--button);
-  text-shadow: 0 0 12px rgba(98, 255, 107, 0.38);
+  text-shadow:
+    0 0 12px rgba(98, 255, 107, 0.42),
+    1px 0 0 rgba(202, 255, 200, 0.22),
+    -1px 0 0 rgba(76, 255, 91, 0.18);
+  animation: cyber-text-glitch 6.5s steps(1, end) infinite;
+}
+
+:root[data-theme="cyberpunk"] .nav-command,
+:root[data-theme="cyberpunk"] .thread-item,
+:root[data-theme="cyberpunk"] .model-button,
+:root[data-theme="cyberpunk"] .access-button,
+:root[data-theme="cyberpunk"] .run-state {
+  font-family:
+    "OCR A Std", "OCR A", "Andale Mono", "Share Tech Mono",
+    "JetBrains Mono", "Cascadia Code", ui-monospace, monospace;
+}
+
+:root[data-theme="cyberpunk"] .nav-command:hover,
+:root[data-theme="cyberpunk"] .theme-option:hover {
+  animation: cyber-text-glitch 1.6s steps(1, end) 1;
+}
+
+@keyframes cyber-text-glitch {
+  0%,
+  86%,
+  100% {
+    transform: translateX(0);
+    filter: none;
+  }
+  88% {
+    transform: translateX(-1px);
+    filter: hue-rotate(16deg) saturate(1.35);
+  }
+  90% {
+    transform: translateX(1px);
+    text-shadow:
+      2px 0 0 rgba(202, 255, 200, 0.5),
+      -2px 0 0 rgba(72, 255, 91, 0.38),
+      0 0 14px rgba(98, 255, 107, 0.72);
+  }
+  92% {
+    transform: translateX(0);
+    filter: contrast(1.25);
+  }
+}
+
+@keyframes cyber-button-pulse {
+  0%,
+  100% {
+    filter: brightness(1);
+  }
+  50% {
+    filter: brightness(1.18);
+  }
 }
 
 :root[data-theme="cyberpunk"] .entry-body a {
