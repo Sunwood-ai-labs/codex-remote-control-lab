@@ -32,4 +32,4 @@ It prints the JSON-RPC messages it sent and received so changes in Codex app-ser
 
 ## Bridge Behavior
 
-The bridge keeps one upstream WebSocket connection per shared browser thread. Browser clients talk to `/bridge?token=...`, while the upstream Codex app-server remains at `ws://127.0.0.1:45213`.
+The bridge keeps one upstream WebSocket connection per shared browser thread. Browser clients normally talk to `/bridge?token=...`, while the upstream Codex app-server remains at `ws://127.0.0.1:45213`. With `PHONE_DEBUG_NO_TOKEN=1`, localhost-only debug clients can use `/bridge` without a token.

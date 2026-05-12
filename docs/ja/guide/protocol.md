@@ -32,4 +32,4 @@ probe は次を送ります。
 
 ## Bridge Behavior
 
-bridge は共有 browser thread ごとに upstream WebSocket を 1 本持ちます。browser client は `/bridge?token=...` に接続し、upstream Codex app-server は `ws://127.0.0.1:45213` のままです。
+bridge は共有 browser thread ごとに upstream WebSocket を 1 本持ちます。通常の browser client は `/bridge?token=...` に接続し、upstream Codex app-server は `ws://127.0.0.1:45213` のままです。`PHONE_DEBUG_NO_TOKEN=1` の localhost 専用デバッグ時だけ、token なしの `/bridge` を使えます。

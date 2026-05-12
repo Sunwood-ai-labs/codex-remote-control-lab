@@ -18,6 +18,7 @@ If you find a security issue, open a private advisory or contact the repository 
 - Do not commit local tokens, generated Codex homes, session databases, logs, uploads, or private screenshots.
 - Do not bind `codex app-server` directly to a LAN or public interface without a separate authenticated private network.
 - Treat printed `?token=...` URLs as private local access keys. Do not publish them in issues, chats, screenshots, or streams.
+- Use `PHONE_DEBUG_NO_TOKEN=1` as the tokenless localhost debugging exception. Add `PHONE_DEBUG_BIND=lan` only for intentional tokenless LAN debugging on a trusted private network.
 - Stop the bridge with `Ctrl+C`; closing the terminal or restarting the PC stops the process.
 - Do not expose the bridge through an unauthenticated public tunnel or raw port forward.
 - Run the bridge from a normal user account, not a root/admin shell.

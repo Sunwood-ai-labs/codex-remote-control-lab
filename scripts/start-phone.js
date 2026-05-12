@@ -9,6 +9,7 @@ const WebSocket = require("ws");
 const { bridgeKeyForRequest, shouldDisposeIdleBridge, shouldPromoteBridgeKey } = require("./bridge-state");
 const { isHistorySyncEnabled, runHistorySync } = require("./history-sync");
 const { bridgeUrls, notifyBridgeUrls } = require("./phone-notify");
+const { findLiveBridge, readThreadSnapshot } = require("./thread-read");
 
 const root = path.resolve(__dirname, "..");
 
@@ -28,7 +29,17 @@ function loadEnvFile(filePath) {
   }
 }
 
-loadEnvFile(path.join(root, ".env"));
+// Walk up from root to find .env — handles git worktrees where root is
+// several levels inside the actual project directory.
+(function loadEnvWalkUp() {
+  let dir = root;
+  for (let i = 0; i < 6; i++) {
+    loadEnvFile(path.join(dir, ".env"));
+    const parent = path.dirname(dir);
+    if (parent === dir) break;
+    dir = parent;
+  }
+})();
 
 const codexBin = path.join(root, "node_modules", ".bin", "codex");
 const uiPort = Number(process.env.PHONE_UI_PORT || 45214);
@@ -36,9 +47,15 @@ const codexPort = Number(process.env.CODEX_APP_SERVER_PORT || 45213);
 const codexSocketPath = process.env.CODEX_APP_SERVER_SOCK || "";
 const codexUrl = process.env.CODEX_APP_SERVER_URL || (codexSocketPath ? "ws://codex-app-server/rpc" : `ws://127.0.0.1:${codexPort}`);
 const shouldStartCodexServer = !process.env.CODEX_APP_SERVER_URL && !codexSocketPath;
-const workdir = process.env.CODEX_WORKDIR || root;
+const workdir = path.resolve(process.env.CODEX_WORKDIR || root);
 const model = process.env.CODEX_MODEL || "gpt-5.4";
 const historySyncEnabled = isHistorySyncEnabled(process.env);
+const debugNoToken = /^(1|true|yes|on)$/i.test(process.env.PHONE_DEBUG_NO_TOKEN || "");
+const debugBind = (process.env.PHONE_DEBUG_BIND || "").trim().toLowerCase();
+const debugLan = debugNoToken && debugBind === "lan";
+const authMode = debugNoToken ? "debug-no-token" : "token";
+const tokenRequired = authMode === "token";
+const listenHost = tokenRequired || debugLan ? "0.0.0.0" : "127.0.0.1";
 const tokenPath = path.join(root, ".phone-token");
 const uploadDir = path.join(root, ".uploads");
 const bridges = new Map();
@@ -72,7 +89,7 @@ function getToken() {
 function lanAddresses() {
   return Object.values(os.networkInterfaces())
     .flat()
-    .filter((entry) => entry && entry.family === "IPv4" && !entry.internal)
+    .filter((entry) => entry && (entry.family === "IPv4" || entry.family === 4) && !entry.internal)
     .map((entry) => entry.address);
 }
 
@@ -228,16 +245,42 @@ function sendJson(res, status, body) {
 }
 
 function requireToken(url, phoneToken, res) {
+  if (!tokenRequired) return true;
   if (url.searchParams.get("token") === phoneToken) return true;
   sendJson(res, 401, { error: "invalid token" });
   return false;
 }
 
-function safeRelativePath(input) {
+function safePathWithin(base, input) {
+  const resolvedBase = path.resolve(base);
   const raw = String(input || "");
-  const target = path.isAbsolute(raw) ? path.resolve(raw) : path.resolve(root, raw.replace(/^[/\\]+/, ""));
-  if (!target.startsWith(`${root}${path.sep}`) && target !== root) return null;
+  const clean = raw.replace(/^[/\\]+/, "");
+  const target = path.isAbsolute(raw) ? path.resolve(raw) : path.resolve(resolvedBase, clean);
+  if (!target.startsWith(`${resolvedBase}${path.sep}`) && target !== resolvedBase) return null;
   return target;
+}
+
+function safeRelativePath(input) {
+  return safePathWithin(root, input);
+}
+
+function safeWorkdirPath(input) {
+  return safePathWithin(workdir, input);
+}
+
+function safeOpenPath(input) {
+  const workspacePath = safeWorkdirPath(input);
+  if (workspacePath) {
+    try {
+      if (fs.statSync(workspacePath).isFile()) return workspacePath;
+    } catch {}
+  }
+  return safeRelativePath(input);
+}
+
+function relativeDisplayPath(filePath) {
+  const base = filePath.startsWith(`${workdir}${path.sep}`) || filePath === workdir ? workdir : root;
+  return path.relative(base, filePath);
 }
 
 function safeUploadPath(input) {
@@ -270,6 +313,252 @@ function discoverArtifacts() {
     name: path.basename(file),
     kind: isImagePath(file) ? "image" : /\.md(?:own)?$/i.test(file) ? "markdown" : "file",
   }));
+}
+
+const ignoredWorkspaceNames = new Set([
+  ".git",
+  ".claude",
+  ".codex-home",
+  ".uploads",
+  "node_modules",
+  "coverage",
+  "dist",
+]);
+
+function shouldSkipWorkspaceEntry(name) {
+  return ignoredWorkspaceNames.has(name) || /^\.codex-home/.test(name) || /^\.phone-token/.test(name) || /^\.env(?:\.|$)/.test(name);
+}
+
+function workspaceKind(filePath, stat) {
+  if (stat.isDirectory()) return "directory";
+  if (isImagePath(filePath)) return "image";
+  if (/\.md(?:own)?$/i.test(filePath)) return "markdown";
+  return "file";
+}
+
+function artifactKindForPath(filePath) {
+  if (isImagePath(filePath)) return "image";
+  if (/\.md(?:own)?$/i.test(filePath)) return "markdown";
+  return "file";
+}
+
+async function discoverWorkspaceEntries({ limit = 200, query = "" } = {}) {
+  const entries = [];
+  const normalizedQuery = query.trim().toLowerCase();
+  const maxEntries = Math.max(1, Math.min(Number(limit) || 200, 500));
+
+  async function walk(dir, depth) {
+    if (entries.length >= maxEntries || depth > 5) return;
+    let children;
+    try {
+      children = await fs.promises.readdir(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    children = children
+      .filter((entry) => !shouldSkipWorkspaceEntry(entry.name))
+      .sort((a, b) => Number(b.isDirectory()) - Number(a.isDirectory()) || a.name.localeCompare(b.name));
+
+    for (const child of children) {
+      if (entries.length >= maxEntries) return;
+      const fullPath = path.join(dir, child.name);
+      let stat;
+      try {
+        stat = await fs.promises.stat(fullPath);
+      } catch {
+        continue;
+      }
+      if (!stat.isDirectory() && !stat.isFile()) continue;
+      const relative = path.relative(workdir, fullPath);
+      if (normalizedQuery && !relative.toLowerCase().includes(normalizedQuery)) {
+        if (stat.isDirectory()) await walk(fullPath, depth + 1);
+        continue;
+      }
+      entries.push({
+        path: relative,
+        name: child.name,
+        type: stat.isDirectory() ? "directory" : "file",
+        kind: workspaceKind(fullPath, stat),
+        size: stat.isFile() ? stat.size : null,
+      });
+      if (stat.isDirectory()) await walk(fullPath, depth + 1);
+    }
+  }
+
+  await walk(workdir, 0);
+  return entries;
+}
+
+function runGit(args) {
+  return new Promise((resolve, reject) => {
+    const child = spawn("git", args, {
+      cwd: workdir,
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    let stdout = "";
+    let stderr = "";
+    const timer = setTimeout(() => {
+      child.kill("SIGTERM");
+      reject(new Error(`git ${args.join(" ")} timed out`));
+    }, 5000);
+
+    child.stdout.on("data", (data) => {
+      stdout += data;
+      if (stdout.length > 512 * 1024) child.kill("SIGTERM");
+    });
+    child.stderr.on("data", (data) => {
+      stderr += data;
+      if (stderr.length > 512 * 1024) child.kill("SIGTERM");
+    });
+    child.on("error", (error) => {
+      clearTimeout(timer);
+      reject(error);
+    });
+    child.on("close", (code) => {
+      clearTimeout(timer);
+      if (code !== 0) {
+        reject(new Error((stderr || stdout || `git ${args.join(" ")} failed`).trim()));
+        return;
+      }
+      resolve(stdout.replace(/\s+$/g, ""));
+    });
+  });
+}
+
+function shouldSkipReviewPath(filePath) {
+  const clean = String(filePath || "").replace(/^[/\\]+/, "").replace(/[\\/]+$/, "");
+  return (
+    clean === ".claude" ||
+    clean.startsWith(".claude/") ||
+    clean === ".phone-token" ||
+    clean.startsWith(".codex-home") ||
+    clean.startsWith(".uploads/") ||
+    clean.startsWith("node_modules/")
+  );
+}
+
+function parseGitPathName(rawPath) {
+  let filePath = String(rawPath || "");
+  if (!filePath.includes(" => ")) return filePath;
+  if (/\{[^}]*\s=>\s[^}]*\}/.test(filePath)) {
+    return filePath.replace(/\{[^}]*\s=>\s([^}]*)\}/g, "$1");
+  }
+  return filePath.split(" => ").pop().replace(/[{}]/g, "");
+}
+
+function parseNumstat(numstatText) {
+  return new Map(
+    numstatText
+      .split(/\r?\n/)
+      .filter(Boolean)
+      .map((line) => {
+        const [added, deleted, ...rest] = line.split(/\t/);
+        const filePath = parseGitPathName(rest.join("\t"));
+        return [
+          filePath,
+          {
+            additions: Number(added) || 0,
+            deletions: Number(deleted) || 0,
+          },
+        ];
+      }),
+  );
+}
+
+function parseStatusPorcelain(statusText) {
+  const records = String(statusText || "").split("\0").filter(Boolean);
+  const files = [];
+  for (let i = 0; i < records.length; i += 1) {
+    const record = records[i];
+    const status = record.slice(0, 2).trim() || "modified";
+    const filePath = record.slice(3);
+    if (!filePath) continue;
+    files.push({ status, path: filePath });
+    if (/[RC]/.test(status) && i + 1 < records.length) i += 1;
+  }
+  return files;
+}
+
+async function decorateReviewFiles(files) {
+  const decorated = await Promise.all(files
+    .filter((file) => !shouldSkipReviewPath(file.path))
+    .map(async (file) => {
+      const absolutePath = safeWorkdirPath(file.path);
+      let openable = false;
+      try {
+        openable = Boolean(absolutePath && (await fs.promises.stat(absolutePath)).isFile());
+      } catch {
+        openable = false;
+      }
+      return {
+        ...file,
+        kind: openable ? artifactKindForPath(absolutePath) : "file",
+        openable,
+      };
+    }));
+  const totals = decorated.reduce(
+    (sum, file) => ({
+      additions: sum.additions + (file.additions || 0),
+      deletions: sum.deletions + (file.deletions || 0),
+    }),
+    { additions: 0, deletions: 0 },
+  );
+  return { files: decorated, totals };
+}
+
+function workingTreeReviewFiles(statusText, numstatText) {
+  const numstat = parseNumstat(numstatText);
+  return parseStatusPorcelain(statusText)
+    .map((file) => {
+      const filePath = parseGitPathName(file.path);
+      const stats = numstat.get(filePath) || { additions: 0, deletions: 0 };
+      return {
+        status: file.status,
+        path: filePath,
+        additions: stats.additions,
+        deletions: stats.deletions,
+      };
+    });
+}
+
+async function lastCommitReviewFiles() {
+  const numstat = parseNumstat(await runGit(["show", "--numstat", "--format=", "--no-renames", "HEAD"]));
+  const names = (await runGit(["show", "--name-status", "--format=", "--no-renames", "HEAD"]))
+    .split(/\r?\n/)
+    .filter(Boolean);
+  return names.map((line) => {
+    const [status, ...rest] = line.split(/\t/);
+    const filePath = rest.join("\t");
+    const stats = numstat.get(filePath) || { additions: 0, deletions: 0 };
+    return {
+      status,
+      path: filePath,
+      additions: stats.additions,
+      deletions: stats.deletions,
+    };
+  });
+}
+
+async function reviewSummary() {
+  const [branch, statusText, statText, numstatText] = await Promise.all([
+    runGit(["branch", "--show-current"]),
+    runGit(["status", "--porcelain=v1", "-z"]),
+    runGit(["diff", "HEAD", "--stat", "--"]),
+    runGit(["diff", "HEAD", "--numstat", "--"]),
+  ]);
+  const working = await decorateReviewFiles(workingTreeReviewFiles(statusText, numstatText));
+  const fallback = working.files.length ? null : await decorateReviewFiles(await lastCommitReviewFiles());
+  const source = fallback ? "latest commit" : "working tree";
+  const files = fallback?.files || working.files;
+  const totals = fallback?.totals || working.totals;
+  return {
+    branch,
+    clean: files.length === 0,
+    source,
+    files,
+    totals,
+    stat: statText.split(/\r?\n/).filter(Boolean).slice(0, 20),
+  };
 }
 
 function readAutomations() {
@@ -411,6 +700,7 @@ class SharedBridge {
     this.threadId = null;
     this.activeTurnId = null;
     this.ready = false;
+    this.startupFailed = false;
     this.history = [];
     this.turnQueue = [];
     this.upstream = createUpstreamWebSocket();
@@ -507,10 +797,12 @@ class SharedBridge {
       if (pendingMethod === "thread/start" || pendingMethod === "thread/resume") {
         this.pending.delete(msg.id);
         if (msg.error) {
+          this.startupFailed = true;
           this.emit("error", { text: msg.error.message || JSON.stringify(msg.error) });
           return;
         }
         this.threadId = msg.result.thread.id;
+        this.startupFailed = false;
         this.promoteBridgeKey();
         this.ready = true;
         this.history = historyFromThread(msg.result.thread);
@@ -572,8 +864,14 @@ class SharedBridge {
       this.emit("event", { event: msg });
     });
 
-    this.upstream.on("error", (error) => this.emit("error", { text: error.message }));
-    this.upstream.on("close", () => this.emit("status", { text: "Codex接続が閉じました" }));
+    this.upstream.on("error", (error) => {
+      if (!this.ready) this.startupFailed = true;
+      this.emit("error", { text: error.message });
+    });
+    this.upstream.on("close", () => {
+      if (!this.ready) this.startupFailed = true;
+      this.emit("status", { text: "Codex接続が閉じました" });
+    });
   }
 
   prompt(text, attachments = [], options = {}) {
@@ -676,7 +974,7 @@ function bindBrowser(browser, phoneToken, threadId) {
 
   browser.on("message", (data) => {
     const msg = JSON.parse(data.toString());
-    if (msg.token !== phoneToken) {
+    if (tokenRequired && msg.token !== phoneToken) {
       bridge.emitTo(browser, "error", { text: "Invalid token" });
       browser.close();
       return;
@@ -687,7 +985,7 @@ function bindBrowser(browser, phoneToken, threadId) {
 }
 
 async function main() {
-  const phoneToken = getToken();
+  const phoneToken = tokenRequired ? getToken() : "";
   const codex = shouldStartCodexServer ? startCodexServer() : null;
   if (shouldStartCodexServer) {
     await waitForReady();
@@ -698,7 +996,15 @@ async function main() {
   const server = http.createServer(async (req, res) => {
     const url = new URL(req.url, `http://${req.headers.host}`);
     if (url.pathname === "/api/info") {
-      sendJson(res, 200, { model, workdir, codexUrl, codexSocketPath: codexSocketPath || null, managedCodexServer: shouldStartCodexServer, tokenRequired: true });
+      sendJson(res, 200, {
+        model,
+        workdir,
+        codexUrl,
+        codexSocketPath: codexSocketPath || null,
+        managedCodexServer: shouldStartCodexServer,
+        tokenRequired,
+        authMode,
+      });
       return;
     }
     if (url.pathname === "/api/threads") {
@@ -765,6 +1071,8 @@ async function main() {
         codexSocketPath: codexSocketPath || null,
         managedCodexServer: shouldStartCodexServer,
         historySyncEnabled,
+        tokenRequired,
+        authMode,
         uiPort,
         codexPort,
         bridges: Array.from(bridges.values()).map((bridge) => ({
@@ -803,24 +1111,15 @@ async function main() {
         return;
       }
       try {
-        let thread;
-        try {
-          const result = await appServerRequest("thread/read", {
-            threadId,
-            includeTurns: true,
-          });
-          thread = result.thread || result;
-        } catch (readError) {
-          const result = await appServerRequest("thread/resume", {
-            threadId,
-            model,
-            cwd: workdir,
-            approvalPolicy: "on-request",
-            sandbox: "workspace-write",
-          });
-          thread = result.thread;
-        }
-        sendJson(res, 200, { threadId: thread.id || threadId, history: historyFromThread(thread) });
+        const snapshot = await readThreadSnapshot({
+          threadId,
+          liveBridge: findLiveBridge(bridges, threadId),
+          request: appServerRequest,
+          model,
+          workdir,
+          historyFromThread,
+        });
+        sendJson(res, 200, snapshot);
       } catch (error) {
         sendJson(res, 500, { error: error.message });
       }
@@ -836,6 +1135,29 @@ async function main() {
       sendJson(res, 200, { data: discoverArtifacts() });
       return;
     }
+    if (url.pathname === "/api/workspace") {
+      if (!requireToken(url, phoneToken, res)) return;
+      try {
+        sendJson(res, 200, {
+          data: await discoverWorkspaceEntries({
+            limit: Number(url.searchParams.get("limit") || 200),
+            query: url.searchParams.get("q") || "",
+          }),
+        });
+      } catch (error) {
+        sendJson(res, 500, { error: error.message });
+      }
+      return;
+    }
+    if (url.pathname === "/api/review") {
+      if (!requireToken(url, phoneToken, res)) return;
+      try {
+        sendJson(res, 200, await reviewSummary());
+      } catch (error) {
+        sendJson(res, 500, { error: error.message });
+      }
+      return;
+    }
     if (url.pathname === "/api/uploaded") {
       if (!requireToken(url, phoneToken, res)) return;
       const target = safeUploadPath(url.searchParams.get("name"));
@@ -849,7 +1171,7 @@ async function main() {
     }
     if (url.pathname === "/api/file/raw") {
       if (!requireToken(url, phoneToken, res)) return;
-      const target = safeRelativePath(url.searchParams.get("path"));
+      const target = safeOpenPath(url.searchParams.get("path"));
       if (!target || !fs.existsSync(target) || !fs.statSync(target).isFile() || !isImagePath(target)) {
         sendJson(res, 404, { error: "image not found" });
         return;
@@ -860,22 +1182,22 @@ async function main() {
     }
     if (url.pathname === "/api/file") {
       if (!requireToken(url, phoneToken, res)) return;
-      const target = safeRelativePath(url.searchParams.get("path"));
+      const target = safeOpenPath(url.searchParams.get("path"));
       if (!target || !fs.existsSync(target) || !fs.statSync(target).isFile()) {
         sendJson(res, 404, { error: "file not found" });
         return;
       }
       if (isImagePath(target)) {
         sendJson(res, 200, {
-          path: path.relative(root, target),
+          path: relativeDisplayPath(target),
           kind: "image",
           mimeType: mimeForPath(target),
-          imageUrl: `/api/file/raw?path=${encodeURIComponent(path.relative(root, target))}`,
+          imageUrl: `/api/file/raw?path=${encodeURIComponent(relativeDisplayPath(target))}`,
         });
         return;
       }
       sendJson(res, 200, {
-        path: path.relative(root, target),
+        path: relativeDisplayPath(target),
         kind: /\.md(?:own)?$/i.test(target) ? "markdown" : "text",
         text: fs.readFileSync(target, "utf8").slice(0, 80_000),
       });
@@ -891,7 +1213,7 @@ async function main() {
       socket.destroy();
       return;
     }
-    if (url.searchParams.get("token") !== phoneToken) {
+    if (tokenRequired && url.searchParams.get("token") !== phoneToken) {
       socket.write("HTTP/1.1 401 Unauthorized\r\n\r\n");
       socket.destroy();
       return;
@@ -900,17 +1222,27 @@ async function main() {
     wss.handleUpgrade(req, socket, head, (ws) => bindBrowser(ws, phoneToken, threadId));
   });
 
-  server.listen(uiPort, "0.0.0.0", () => {
-    const urls = bridgeUrls(lanAddresses(), uiPort, phoneToken);
+  server.listen(uiPort, listenHost, () => {
+    const addresses = tokenRequired || debugLan ? lanAddresses() : ["127.0.0.1"];
+    const urls = bridgeUrls(addresses, uiPort, phoneToken);
     console.log("");
     console.log("Codex shared browser bridge is ready.");
     for (const url of urls) console.log(`  ${url}`);
     console.log("");
+    console.log(`Auth:    ${tokenRequired ? "token" : debugLan ? "debug-no-token (LAN exposed)" : "debug-no-token (localhost only)"}`);
+    console.log(`Listen:  ${listenHost}:${uiPort}`);
     console.log(`Workdir: ${workdir}`);
     console.log(`Model:   ${model}`);
     console.log(`Codex:   ${shouldStartCodexServer ? codexUrl : codexSocketPath || codexUrl}`);
-    console.log("Open the same URL from PC and phone to share one bridge thread.");
+    if (tokenRequired) console.log("Open the same URL from PC and phone to share one bridge thread.");
+    else if (debugLan) console.log("Tokenless debug LAN mode is exposed to this network. Use only on a trusted LAN.");
+    else console.log("Open the URL on this Mac only; tokenless debug mode is not exposed to the LAN.");
     console.log("Press Ctrl+C to stop.");
+
+    if (!tokenRequired) {
+      console.log("[notify] skipped in debug-no-token mode");
+      return;
+    }
 
     notifyBridgeUrls(urls).then((results) => {
       for (const result of results) {
@@ -925,7 +1257,21 @@ async function main() {
   });
 }
 
-main().catch((error) => {
-  console.error(error);
-  process.exit(1);
-});
+if (require.main === module) {
+  main().catch((error) => {
+    console.error(error);
+    process.exit(1);
+  });
+} else {
+  module.exports = {
+    decorateReviewFiles,
+    discoverWorkspaceEntries,
+    relativeDisplayPath,
+    reviewSummary,
+    runGit,
+    safeOpenPath,
+    safePathWithin,
+    safeRelativePath,
+    safeWorkdirPath,
+  };
+}

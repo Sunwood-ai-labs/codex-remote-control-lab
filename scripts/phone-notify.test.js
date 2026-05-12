@@ -10,6 +10,10 @@ test("bridgeUrls builds tokenized LAN URLs", () => {
   ]);
 });
 
+test("bridgeUrls omits token query for tokenless debug URLs", () => {
+  assert.deepEqual(bridgeUrls(["127.0.0.1"], 45214, ""), ["http://127.0.0.1:45214/"]);
+});
+
 test("notificationTargets stays empty without opt-in environment variables", () => {
   assert.deepEqual(notificationTargets({}), []);
 });

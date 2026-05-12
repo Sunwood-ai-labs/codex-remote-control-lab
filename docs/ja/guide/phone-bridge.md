@@ -21,6 +21,24 @@ http://192.168.11.8:45214/?token=...
 
 表示された URL には `?token=...` が含まれます。この URL は private に扱ってください。bridge を止めるときは、`npm run phone` を実行している terminal で `Ctrl+C` を押します。terminal を閉じた場合や PC を再起動した場合は、もう一度 `npm run phone` を実行します。
 
+繰り返し使う local 設定は、公開安全な template をコピーして編集できます。
+
+```bash
+cp .env.example .env
+```
+
+token なしで UI をローカルデバッグする場合は、明示的に次を指定します。
+
+```bash
+PHONE_DEBUG_NO_TOKEN=1 npm run phone
+```
+
+繰り返しローカルデバッグする場合は、repo-local の `.env` に `PHONE_DEBUG_NO_TOKEN=1` を置けます。bridge は mode 判定前に `.env` を読み込みます。
+
+この場合は `http://127.0.0.1:45214/` のような token なし URL を表示し、bridge は `127.0.0.1` に bind されます。スマホ、LAN 共有、tunnel、shared network 用ではありません。
+
+信頼できる LAN 上の別端末から token なしでデバッグする場合は、`PHONE_DEBUG_NO_TOKEN=1` と `PHONE_DEBUG_BIND=lan` を組み合わせます。この場合は bridge を `0.0.0.0` に bind し、token なし LAN URL を表示します。自分が管理する private network でだけ使ってください。
+
 ## 構成
 
 ```text
@@ -50,21 +68,28 @@ npm run phone
 
 ## 環境変数
 
-```bash
-PHONE_UI_PORT=45214 npm run phone
-CODEX_WORKDIR=/Users/admin/Prj/some-project npm run phone
-CODEX_MODEL=gpt-5.4 npm run phone
-CODEX_APP_SERVER_SOCK=/Users/admin/.codex/app-server-control/app-server-control.sock npm run phone
-CODEX_APP_SERVER_URL=ws://127.0.0.1:45213 npm run phone
-CODEX_HISTORY_SYNC=0 npm run phone
-PHONE_TOKEN=choose-your-own-token npm run phone
-PHONE_NTFY_TOPIC=your-private-topic npm run phone
-PHONE_PUSHOVER_TOKEN=app-token PHONE_PUSHOVER_USER=user-key npm run phone
-PHONE_DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/... npm run phone
-PHONE_NOTIFY_TIMEOUT_MS=5000 npm run phone
+```text
+PHONE_UI_PORT=45214
+CODEX_WORKDIR=/Users/admin/Prj/some-project
+CODEX_MODEL=gpt-5.4
+CODEX_APP_SERVER_SOCK=/Users/admin/.codex/app-server-control/app-server-control.sock
+CODEX_APP_SERVER_URL=ws://127.0.0.1:45213
+CODEX_HISTORY_SYNC=1
+PHONE_TOKEN=choose-your-own-token
+PHONE_DEBUG_NO_TOKEN=1
+PHONE_DEBUG_BIND=lan
+PHONE_NTFY_TOPIC=your-private-topic
+PHONE_PUSHOVER_TOKEN=app-token
+PHONE_PUSHOVER_USER=user-key
+PHONE_DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/...
+PHONE_NOTIFY_TIMEOUT_MS=5000
 ```
 
+コメント付きの全体 template は `.env.example` にあります。
+
 起動通知は任意です。`PHONE_NTFY_TOPIC` を設定すると ready URL を ntfy topic へ投稿します。`PHONE_PUSHOVER_TOKEN` と `PHONE_PUSHOVER_USER` を設定すると同じ URL を Pushover へ送ります。`PHONE_DISCORD_WEBHOOK_URL` を設定すると Discord へ投稿します。`npm run phone` は local `.env` を読んでから環境変数を参照します。`PHONE_NTFY_SERVER` は既定で `https://ntfy.sh`、HTTPS 必須です。通知 request は `PHONE_NOTIFY_TIMEOUT_MS` で timeout し、既定は 5000 ms です。LAN IPv4 URL がある場合、通知本文には token 付き bridge URL が入るため、private/protected topic、account、channel を使い、通知用 credential は Git に入れないでください。LAN IPv4 URL を検出できない場合は、provider の link field を省略し、host console を確認するよう通知します。
+
+token なしデバッグモードでは、起動通知は意図的にスキップされます。`PHONE_DEBUG_NO_TOKEN=1` と `PHONE_DEBUG_BIND=lan` の URL を手動で Discord に送る場合は、自分の private/trusted な webhook・channel に限定してください。同じ LAN URL に到達できる人は、token なしで bridge を操作できます。
 
 background の thread 一覧 polling は、同じ error の連続表示を抑えます。app-server の短い再起動や token mismatch が起きても、同じ `/api/threads` failure が chat log に増え続けることは避けます。
 
@@ -78,5 +103,5 @@ background の thread 一覧 polling は、同じ error の連続表示を抑え
 - repository artifact preview
 - chat と artifact の Markdown rendering
 - browser 画像添付を `localImage` input として Codex に渡す
-- 設定 panel から simple / cyberpunk / botanical のカラーテーマを切り替え
+- 設定 panel から simple / cyberpunk / botanical / Stigmata のカラーテーマを切り替え
 - bridge-managed thread を LAN 内の複数端末で共有

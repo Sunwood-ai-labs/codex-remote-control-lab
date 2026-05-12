@@ -1,5 +1,9 @@
 function bridgeUrls(addresses, uiPort, phoneToken) {
-  return addresses.map((address) => `http://${address}:${uiPort}/?token=${phoneToken}`);
+  return addresses.map((address) => {
+    const url = new URL(`http://${address}:${uiPort}/`);
+    if (phoneToken) url.searchParams.set("token", phoneToken);
+    return url.toString();
+  });
 }
 
 function envValue(env, key) {
