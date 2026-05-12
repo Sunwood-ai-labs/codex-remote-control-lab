@@ -95,6 +95,9 @@
   --state-ready: #00ffe7;
   --state-running: #00ffe7;
   --state-approval: #ffcc44;
+  --surface-under: #050814;
+  --surface-raised: #0a0f1d;
+  --focus: #00ffe7;
   /* neon glow tokens */
   --glow-cyan: 0 0 8px rgba(0, 255, 231, 0.7), 0 0 20px rgba(0, 255, 231, 0.35);
   --glow-magenta: 0 0 8px rgba(223, 108, 255, 0.7), 0 0 20px rgba(223, 108, 255, 0.35);
@@ -1533,6 +1536,10 @@ textarea::placeholder {
   overflow-wrap: anywhere;
 }
 
+.artifact-row.no-icon {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 .artifact-row > svg,
 .terminal-row > svg,
 .source-row > svg {
@@ -1561,11 +1568,15 @@ textarea::placeholder {
 .panel-row-copy {
   display: block;
   min-width: 0;
+  overflow-wrap: break-word;
+  word-break: normal;
 }
 
 .artifact-row strong,
 .artifact-row small {
   display: block;
+  overflow-wrap: break-word;
+  word-break: normal;
 }
 
 .artifact-row strong {

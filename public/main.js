@@ -873,6 +873,7 @@ function addPanelRow(text, detail, onClick, icon = "") {
   const row = document.createElement("button");
   row.type = "button";
   row.className = "artifact-row";
+  row.classList.toggle("no-icon", !icon);
   const iconHtml = icon ? `<span class="panel-row-icon" aria-hidden="true">${escapeHtml(icon)}</span>` : "";
   row.innerHTML = detail
     ? `${iconHtml}<span class="panel-row-copy"><strong>${escapeHtml(text)}</strong><small>${escapeHtml(detail)}</small></span>`
