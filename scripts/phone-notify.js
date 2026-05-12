@@ -64,6 +64,30 @@ function notificationMessage(urls) {
   ].join("\n");
 }
 
+function taskStatusLabel(status) {
+  if (status === "completed") return "completed";
+  if (status === "failed") return "failed";
+  if (status === "approval") return "waiting for approval";
+  return String(status || "updated");
+}
+
+function taskNotificationMessage(event = {}) {
+  const provider = event.provider || "Codex";
+  const lines = [
+    `${provider} task ${taskStatusLabel(event.status)}.`,
+    "",
+  ];
+  if (event.threadId) lines.push(`Thread: ${event.threadId}`);
+  if (event.turnId) lines.push(`Turn: ${event.turnId}`);
+  if (event.model) lines.push(`Model: ${event.model}`);
+  if (event.workdir) lines.push(`Workdir: ${event.workdir}`);
+  if (event.message) lines.push("", String(event.message));
+  const urls = Array.isArray(event.urls) ? event.urls.filter(Boolean) : [];
+  if (urls.length) lines.push("", ...urls);
+  else if (event.url) lines.push("", event.url);
+  return lines.join("\n");
+}
+
 async function fetchWithTimeout(fetchImpl, url, options, timeoutMs) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
@@ -81,30 +105,58 @@ function ntfyEndpoint(target) {
 }
 
 async function postNtfy(target, urls, fetchImpl, timeoutMs) {
+  return postNtfyNotification(
+    target,
+    {
+      title: "Codex phone bridge ready",
+      tags: "computer,phone",
+      clickUrl: urls[0],
+      message: notificationMessage(urls),
+    },
+    fetchImpl,
+    timeoutMs,
+  );
+}
+
+async function postNtfyNotification(target, notification, fetchImpl, timeoutMs) {
   const headers = {
-    title: "Codex phone bridge ready",
-    tags: "computer,phone",
+    title: notification.title,
+    tags: notification.tags || "computer,phone",
   };
-  if (urls[0]) headers.click = urls[0];
+  if (notification.clickUrl) headers.click = notification.clickUrl;
   if (target.token) headers.authorization = `Bearer ${target.token}`;
   const response = await fetchWithTimeout(fetchImpl, ntfyEndpoint(target), {
     method: "POST",
     headers,
-    body: notificationMessage(urls),
+    body: notification.message,
   }, timeoutMs);
   if (!response.ok) throw new Error(`ntfy returned HTTP ${response.status}`);
 }
 
 async function postPushover(target, urls, fetchImpl, timeoutMs) {
+  return postPushoverNotification(
+    target,
+    {
+      title: "Codex phone bridge ready",
+      clickUrl: urls[0],
+      clickTitle: "Open Codex phone bridge",
+      message: notificationMessage(urls),
+    },
+    fetchImpl,
+    timeoutMs,
+  );
+}
+
+async function postPushoverNotification(target, notification, fetchImpl, timeoutMs) {
   const form = new URLSearchParams({
     token: target.token,
     user: target.user,
-    title: "Codex phone bridge ready",
-    message: notificationMessage(urls),
+    title: notification.title,
+    message: notification.message,
   });
-  if (urls[0]) {
-    form.set("url", urls[0]);
-    form.set("url_title", "Open Codex phone bridge");
+  if (notification.clickUrl) {
+    form.set("url", notification.clickUrl);
+    form.set("url_title", notification.clickTitle || "Open phone bridge");
   }
   if (target.device) form.set("device", target.device);
   const response = await fetchWithTimeout(fetchImpl, "https://api.pushover.net/1/messages.json", {
@@ -124,11 +176,20 @@ function discordEndpoint(target) {
 }
 
 async function postDiscord(target, urls, fetchImpl, timeoutMs) {
+  return postDiscordNotification(
+    target,
+    { message: notificationMessage(urls) },
+    fetchImpl,
+    timeoutMs,
+  );
+}
+
+async function postDiscordNotification(target, notification, fetchImpl, timeoutMs) {
   const response = await fetchWithTimeout(fetchImpl, discordEndpoint(target), {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({
-      content: notificationMessage(urls),
+      content: notification.message,
       allowed_mentions: { parse: [] },
     }),
   }, timeoutMs);
@@ -140,20 +201,42 @@ async function notifyBridgeUrls(urls, options = {}) {
   const fetchImpl = options.fetch || fetch;
   const targets = notificationTargets(env);
   const timeoutMs = notificationTimeoutMs(env);
-  const results = [];
-
-  for (const target of targets) {
+  return Promise.all(targets.map(async (target) => {
     try {
       if (target.type === "ntfy") await postNtfy(target, urls, fetchImpl, timeoutMs);
       if (target.type === "pushover") await postPushover(target, urls, fetchImpl, timeoutMs);
       if (target.type === "discord") await postDiscord(target, urls, fetchImpl, timeoutMs);
-      results.push({ type: target.type, ok: true });
+      return { type: target.type, ok: true };
     } catch (error) {
-      results.push({ type: target.type, ok: false, error: error.message });
+      return { type: target.type, ok: false, error: error.message };
     }
-  }
+  }));
+}
 
-  return results;
+async function notifyTaskEvent(event = {}, options = {}) {
+  const env = options.env || process.env;
+  const fetchImpl = options.fetch || fetch;
+  const targets = notificationTargets(env);
+  const timeoutMs = notificationTimeoutMs(env);
+  const provider = event.provider || "Codex";
+  const status = event.status || "updated";
+  const notification = {
+    title: `${provider} task ${taskStatusLabel(status)}`,
+    tags: status === "failed" ? "warning,computer" : status === "approval" ? "bell,computer" : "white_check_mark,computer",
+    clickUrl: event.url || (Array.isArray(event.urls) && event.urls.length === 1 ? event.urls[0] : ""),
+    clickTitle: "Open phone bridge thread",
+    message: taskNotificationMessage(event),
+  };
+  return Promise.all(targets.map(async (target) => {
+    try {
+      if (target.type === "ntfy") await postNtfyNotification(target, notification, fetchImpl, timeoutMs);
+      if (target.type === "pushover") await postPushoverNotification(target, notification, fetchImpl, timeoutMs);
+      if (target.type === "discord") await postDiscordNotification(target, notification, fetchImpl, timeoutMs);
+      return { type: target.type, ok: true };
+    } catch (error) {
+      return { type: target.type, ok: false, error: error.message };
+    }
+  }));
 }
 
 module.exports = {
@@ -161,5 +244,7 @@ module.exports = {
   notificationMessage,
   notificationTargets,
   notificationTimeoutMs,
+  notifyTaskEvent,
   notifyBridgeUrls,
+  taskNotificationMessage,
 };

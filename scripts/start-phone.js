@@ -8,7 +8,7 @@ const { spawn } = require("child_process");
 const WebSocket = require("ws");
 const { bridgeKeyForRequest, shouldDisposeIdleBridge, shouldPromoteBridgeKey } = require("./bridge-state");
 const { isHistorySyncEnabled, runHistorySync } = require("./history-sync");
-const { bridgeUrls, notifyBridgeUrls } = require("./phone-notify");
+const { bridgeUrls, notifyBridgeUrls, notifyTaskEvent } = require("./phone-notify");
 const { findLiveBridge, readThreadSnapshot } = require("./thread-read");
 
 const root = path.resolve(__dirname, "..");
@@ -59,6 +59,7 @@ const listenHost = tokenRequired || debugLan ? "0.0.0.0" : "127.0.0.1";
 const tokenPath = path.join(root, ".phone-token");
 const uploadDir = path.join(root, ".uploads");
 const bridges = new Map();
+let notificationBridgeUrls = [];
 const historyLimit = 80;
 const imageExtensions = new Map([
   [".png", "image/png"],
@@ -91,6 +92,62 @@ function lanAddresses() {
     .flat()
     .filter((entry) => entry && (entry.family === "IPv4" || entry.family === 4) && !entry.internal)
     .map((entry) => entry.address);
+}
+
+function preferredBridgeUrl(urls = notificationBridgeUrls) {
+  return (
+    urls.find((item) => {
+      try {
+        return new URL(item).hostname.startsWith("100.");
+      } catch {
+        return false;
+      }
+    }) ||
+    (urls.length === 1 ? urls[0] : "") ||
+    ""
+  );
+}
+
+function bridgeUrlsForThread(threadId) {
+  return notificationBridgeUrls.map((base) => {
+    try {
+      const url = new URL(base);
+      if (threadId) url.searchParams.set("thread", threadId);
+      return url.toString();
+    } catch {
+      return base;
+    }
+  });
+}
+
+function bridgeUrlForThread(threadId) {
+  const urls = bridgeUrlsForThread(threadId);
+  return preferredBridgeUrl(urls);
+}
+
+function notifyRunEvent(status, { threadId, turnId, message } = {}) {
+  const urls = bridgeUrlsForThread(threadId);
+  notifyTaskEvent({
+    status,
+    provider: "Codex",
+    threadId,
+    turnId,
+    model,
+    workdir,
+    message,
+    url: preferredBridgeUrl(urls),
+    urls,
+  })
+    .then((results) => logNotifyResults(`task ${status}`, results))
+    .catch((error) => console.warn(`[notify] task ${status} error: ${error.message}`));
+}
+
+function logNotifyResults(context, results) {
+  if (!results.length) return;
+  for (const result of results) {
+    if (result.ok) console.log(`[notify] ${context} sent via ${result.type}`);
+    else console.warn(`[notify] ${context} ${result.type} failed: ${result.error}`);
+  }
 }
 
 function waitForReady() {
@@ -887,6 +944,7 @@ class SharedBridge {
           const problem = normalizeCodexProblem(msg.error);
           if (problem.turnId) this.activeTurnId = problem.turnId;
           this.emit(problem.severity, { text: problem.text, detail: problem.detail });
+          if (problem.severity === "error") notifyRunEvent("failed", { threadId: this.threadId || problem.threadId, message: problem.text });
           if (problem.severity === "error") this.startNextQueuedTurn();
         } else {
           this.activeTurnId = msg.result.turn.id;
@@ -918,6 +976,7 @@ class SharedBridge {
       if (msg.method === "turn/completed") {
         this.activeTurnId = null;
         this.emit("turn", { status: "completed", turnId: msg.params.turnId });
+        notifyRunEvent("completed", { threadId: this.threadId, turnId: msg.params.turnId });
         this.syncHistory("turn completed");
         this.startNextQueuedTurn();
         return;
@@ -925,6 +984,11 @@ class SharedBridge {
 
       if (msg.method && msg.method.endsWith("/requestApproval")) {
         this.emit("approval", { request: msg });
+        notifyRunEvent("approval", {
+          threadId: this.threadId,
+          turnId: this.activeTurnId,
+          message: msg.method,
+        });
         return;
       }
 
@@ -1304,6 +1368,7 @@ async function main() {
   server.listen(uiPort, listenHost, () => {
     const addresses = tokenRequired || debugLan ? lanAddresses() : ["127.0.0.1"];
     const urls = bridgeUrls(addresses, uiPort, phoneToken);
+    notificationBridgeUrls = urls;
     console.log("");
     console.log("Codex shared browser bridge is ready.");
     for (const url of urls) console.log(`  ${url}`);
@@ -1323,12 +1388,9 @@ async function main() {
       return;
     }
 
-    notifyBridgeUrls(urls).then((results) => {
-      for (const result of results) {
-        if (result.ok) console.log(`[notify] sent via ${result.type}`);
-        else console.warn(`[notify] ${result.type} failed: ${result.error}`);
-      }
-    });
+    notifyBridgeUrls(urls)
+      .then((results) => logNotifyResults("startup", results))
+      .catch((error) => console.warn(`[notify] startup error: ${error.message}`));
   });
 
   process.on("exit", () => {
