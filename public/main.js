@@ -57,6 +57,7 @@ const themeOptions = [
   { id: "simple", name: "シンプル", detail: "静かなローカルコンソール" },
   { id: "cyberpunk", name: "サイバーパンク", detail: "ネオンシアン + マゼンタ / 黒背景" },
   { id: "botanical", name: "ボタニカル", detail: "グリーン / 温かみのあるクリーム" },
+  { id: "stigmata", name: "Stigmata", detail: "氷青 / 銀白 / 赤い販売機の残光" },
 ];
 let selectedTheme = localStorage.getItem("codexPhoneTheme") || "simple";
 

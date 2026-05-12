@@ -148,6 +148,55 @@
 }
 
 /* =================================================================
+ * Stigmata — extracted from the vending-machine title artwork
+ * Palette: #010a14 / #121f31 / #3a455f / #8ba1c0 / #ab6872
+ * ================================================================= */
+:root[data-theme="stigmata"] {
+  color-scheme: dark;
+  font-family:
+    "SF Pro Text", ui-sans-serif, -apple-system, BlinkMacSystemFont,
+    "Segoe UI", sans-serif;
+  --bg: #01050b;
+  --text: #edf4ff;
+  --sidebar: rgba(1, 7, 15, 0.8);
+  --sidebar-start: rgba(3, 10, 20, 0.9);
+  --sidebar-end: rgba(7, 17, 30, 0.78);
+  --line: rgba(139, 161, 192, 0.28);
+  --muted: #8ba1c0;
+  --soft: rgba(139, 161, 192, 0.13);
+  --card: rgba(7, 13, 24, 0.78);
+  --panel: rgba(4, 11, 22, 0.75);
+  --accent: #a3c3e5;
+  --button: #bed9f2;
+  --button-text: #06101c;
+  --nav-text: #dce9fa;
+  --nav-muted: #8ba1c0;
+  --hover: rgba(163, 195, 229, 0.12);
+  --field: rgba(4, 10, 20, 0.78);
+  --entry: #edf4ff;
+  --avatar: rgba(163, 195, 229, 0.16);
+  --avatar-text: #bed9f2;
+  --code-bg: rgba(58, 69, 95, 0.48);
+  --code-text: #dce9fa;
+  --quote: rgba(190, 217, 242, 0.48);
+  --link: #bed9f2;
+  --composer-bg: rgba(5, 12, 23, 0.78);
+  --composer-border: rgba(190, 217, 242, 0.38);
+  --composer-shadow: 0 18px 52px rgba(0, 8, 18, 0.6), 0 0 0 1px rgba(190, 217, 242, 0.12);
+  --scrim: rgba(0, 4, 10, 0.66);
+  --warning-line: rgba(171, 104, 114, 0.66);
+  --warning-bg: rgba(84, 45, 52, 0.24);
+  --warning-text: #f1b9c2;
+  --error: #f08d9a;
+  --state-ready: #a3c3e5;
+  --state-running: #84a9d5;
+  --state-approval: #ab6872;
+  --surface-under: #010a14;
+  --surface-raised: #121f31;
+  --focus: #bed9f2;
+}
+
+/* =================================================================
  * Global reset
  * ================================================================= */
 * {
@@ -285,6 +334,48 @@ body::before {
 
 :root[data-theme="cyberpunk"] .sidebar {
   border-right-color: rgba(0, 255, 231, 0.15);
+}
+
+:root[data-theme="stigmata"] body::before {
+  background:
+    linear-gradient(90deg, rgba(1, 5, 11, 0.9), rgba(1, 5, 11, 0.34) 44%, rgba(1, 5, 11, 0.78)),
+    linear-gradient(180deg, rgba(1, 5, 11, 0.18), rgba(1, 5, 11, 0.82)),
+    url("/assets/vending-machine-stigmata-theme.png") center center / cover no-repeat;
+  opacity: 1;
+}
+
+:root[data-theme="stigmata"] .workspace {
+  background:
+    linear-gradient(90deg, rgba(1, 5, 11, 0.72), rgba(1, 5, 11, 0.18) 46%, rgba(1, 5, 11, 0.62)),
+    linear-gradient(180deg, rgba(1, 5, 11, 0.52), rgba(1, 5, 11, 0.74) 62%, rgba(1, 5, 11, 0.9)),
+    url("/assets/vending-machine-stigmata-theme.png") center center / cover no-repeat,
+    #01050b;
+}
+
+:root[data-theme="stigmata"] .sidebar,
+:root[data-theme="stigmata"] .titlebar,
+:root[data-theme="stigmata"] .panel-card,
+:root[data-theme="stigmata"] .composer {
+  backdrop-filter: blur(18px) saturate(1.22);
+}
+
+:root[data-theme="stigmata"] .panel-card,
+:root[data-theme="stigmata"] .composer,
+:root[data-theme="stigmata"] .run-state {
+  box-shadow:
+    0 22px 52px rgba(0, 5, 13, 0.54),
+    inset 0 1px 0 rgba(237, 244, 255, 0.08);
+}
+
+:root[data-theme="stigmata"] .nav-command#newThread .command-icon,
+:root[data-theme="stigmata"] .send-button {
+  box-shadow: 0 0 24px rgba(190, 217, 242, 0.22);
+}
+
+:root[data-theme="stigmata"] .theme-option.active,
+:root[data-theme="stigmata"] .artifact-row.active,
+:root[data-theme="stigmata"] .panel-tab.active {
+  border-color: rgba(190, 217, 242, 0.68);
 }
 
 button,
@@ -1928,6 +2019,18 @@ textarea::placeholder {
 
 [data-theme-choice="botanical"] .theme-swatch span:nth-child(3) {
   background: #d6dece;
+}
+
+[data-theme-choice="stigmata"] .theme-swatch span:nth-child(1) {
+  background: #010a14;
+}
+
+[data-theme-choice="stigmata"] .theme-swatch span:nth-child(2) {
+  background: #8ba1c0;
+}
+
+[data-theme-choice="stigmata"] .theme-swatch span:nth-child(3) {
+  background: #ab6872;
 }
 
 @media (max-width: 1100px) {
