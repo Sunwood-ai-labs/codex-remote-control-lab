@@ -1,6 +1,6 @@
 ![Codex Remote Control Lab v0.3.0](https://sunwood-ai-labs.github.io/codex-remote-control-lab/release-header-v0.3.0.svg)
 
-[Release notes](https://sunwood-ai-labs.github.io/codex-remote-control-lab/guide/releases/v0.3.0) · [Walkthrough](https://sunwood-ai-labs.github.io/codex-remote-control-lab/guide/articles/v0.3.0-desktop-bridge) · [Security guide](https://sunwood-ai-labs.github.io/codex-remote-control-lab/guide/security)
+[Release notes](https://sunwood-ai-labs.github.io/codex-remote-control-lab/guide/releases/v0.3.0) · [日本語リリースノート](https://sunwood-ai-labs.github.io/codex-remote-control-lab/ja/guide/releases/v0.3.0) · [Walkthrough](https://sunwood-ai-labs.github.io/codex-remote-control-lab/guide/articles/v0.3.0-desktop-bridge) · [日本語ウォークスルー](https://sunwood-ai-labs.github.io/codex-remote-control-lab/ja/guide/articles/v0.3.0-desktop-bridge) · [Security guide](https://sunwood-ai-labs.github.io/codex-remote-control-lab/guide/security) · [安全設計](https://sunwood-ai-labs.github.io/codex-remote-control-lab/ja/guide/security)
 
 v0.3.0 turns the phone bridge into a much closer desktop-style Codex control surface while preserving the localhost-first app-server boundary.
 
