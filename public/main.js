@@ -97,6 +97,7 @@ let selectedReasoning = localStorage.getItem("codexPhoneReasoning") || "中";
 let settingsRenderSeq = 0;
 let artifactItems = [];
 let activeArtifactPath = "";
+let suppressArtifactTouchClickUntil = 0;
 let activePanel = "artifacts";
 let currentRunState = "connecting";
 let interruptRequestPending = false;
@@ -1481,6 +1482,10 @@ function openArtifactFromTrigger(trigger) {
   return true;
 }
 
+function suppressNextArtifactTouchClick() {
+  suppressArtifactTouchClickUntil = Date.now() + 700;
+}
+
 function handleArtifactOpenEvent(event) {
   const trigger = event.currentTarget?.dataset?.openArtifactPath
     ? event.currentTarget
@@ -1493,10 +1498,26 @@ function handleArtifactOpenEvent(event) {
 
 function bindArtifactOpenTrigger(trigger) {
   trigger.addEventListener("click", handleArtifactOpenEvent);
+  trigger.addEventListener("pointerdown", (event) => {
+    if (event.pointerType && event.pointerType !== "mouse") event.preventDefault();
+  });
   trigger.addEventListener("pointerup", (event) => {
-    if (event.pointerType && event.pointerType !== "mouse") handleArtifactOpenEvent(event);
+    if (event.pointerType && event.pointerType !== "mouse") {
+      suppressNextArtifactTouchClick();
+      handleArtifactOpenEvent(event);
+    }
   });
 }
+
+document.addEventListener(
+  "click",
+  (event) => {
+    if (Date.now() >= suppressArtifactTouchClickUntil) return;
+    event.preventDefault();
+    event.stopPropagation();
+  },
+  true,
+);
 
 function showToolError(name, error) {
   clearPanel(name);

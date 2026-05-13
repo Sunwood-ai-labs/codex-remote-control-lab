@@ -284,6 +284,50 @@ test("mobile artifact preview stays open when launched from chat and panel rows"
   assert.equal(await page.locator("body").evaluate((body) => body.classList.contains("show-panel")), true);
 });
 
+test("mobile artifact tap keeps the chat-selected artifact active", async (t) => {
+  const server = await startStaticServer();
+  let browser;
+  t.after(async () => {
+    if (browser) await browser.close();
+    await server.close();
+  });
+
+  browser = await chromium.launch();
+  const context = await browser.newContext({
+    viewport: { width: 390, height: 844 },
+    deviceScaleFactor: 1,
+    isMobile: true,
+    hasTouch: true,
+  });
+  const page = await context.newPage();
+  await mockApi(page, {
+    artifacts: [{ path: "README.md", name: "README.md", kind: "markdown" }],
+    files: {
+      "README.md": { path: "README.md", kind: "markdown", text: "# README Artifact\n\nWrong artifact if this appears." },
+      "docs/proof.md": { path: "docs/proof.md", kind: "markdown", text: "# Chat Selected Artifact\n\nOpened from the chat card." },
+    },
+    review: {
+      clean: false,
+      files: [{ path: "docs/proof.md", status: "A", openable: true, additions: 1, deletions: 0 }],
+      totals: { additions: 1, deletions: 0 },
+    },
+  });
+  await mockWebSocket(page);
+  await page.goto(`${server.origin}/?token=${token}`, { waitUntil: "networkidle" });
+
+  const chatCard = page.locator(".chat-artifact-card[data-open-artifact-path='docs/proof.md']");
+  await chatCard.waitFor();
+  const chatCardBox = await chatCard.boundingBox();
+  assert.ok(chatCardBox);
+  await page.touchscreen.tap(chatCardBox.x + chatCardBox.width / 2, chatCardBox.y + chatCardBox.height / 2);
+  await page.waitForSelector("#artifactPanel[aria-hidden='false']");
+  await page.waitForTimeout(100);
+
+  const previewText = await page.locator("#artifactPreview").innerText();
+  assert.match(previewText, /Chat Selected Artifact/);
+  assert.doesNotMatch(previewText, /README Artifact/);
+});
+
 test("mobile artifact card opens when the tap target is nested text", async (t) => {
   const server = await startStaticServer();
   let browser;
