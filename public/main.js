@@ -823,6 +823,7 @@ function renderReviewDigest(result) {
       </span>
       <span class="chat-artifact-open">開く</span>
     `;
+    bindArtifactOpenTrigger(button);
     artifactListNode.appendChild(button);
   }
   if (!openableFiles.length) artifactListNode.remove();
@@ -838,6 +839,7 @@ function renderReviewDigest(result) {
       <span class="diff-file-stat">${diffStatLabel(file)}</span>
       <span class="diff-file-chevron" aria-hidden="true">⌄</span>
     `;
+    if (file.openable) bindArtifactOpenTrigger(row);
     diffList.appendChild(row);
   }
   return wrap;
@@ -1463,6 +1465,36 @@ function escapeHtml(value) {
   return String(value).replace(/[&<>"']/g, (char) => {
     const entities = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" };
     return entities[char];
+  });
+}
+
+function closestElement(target, selector) {
+  const element = target instanceof Element ? target : target?.parentElement;
+  return element?.closest(selector) || null;
+}
+
+function openArtifactFromTrigger(trigger) {
+  const path = trigger?.dataset?.openArtifactPath;
+  if (!path) return false;
+  closeModelMenu();
+  showArtifact(path);
+  return true;
+}
+
+function handleArtifactOpenEvent(event) {
+  const trigger = event.currentTarget?.dataset?.openArtifactPath
+    ? event.currentTarget
+    : closestElement(event.target, "[data-open-artifact-path]");
+  if (!trigger) return false;
+  event.preventDefault();
+  event.stopPropagation();
+  return openArtifactFromTrigger(trigger);
+}
+
+function bindArtifactOpenTrigger(trigger) {
+  trigger.addEventListener("click", handleArtifactOpenEvent);
+  trigger.addEventListener("pointerup", (event) => {
+    if (event.pointerType && event.pointerType !== "mouse") handleArtifactOpenEvent(event);
   });
 }
 
@@ -2131,7 +2163,7 @@ menuButton.addEventListener("click", () => {
 });
 closePanelButton.addEventListener("click", () => closeRightPanel({ restoreFocus: true }));
 artifactPreview.addEventListener("click", (event) => {
-  if (event.target.closest("[data-preview-close]")) hideArtifactPreview();
+  if (closestElement(event.target, "[data-preview-close]")) hideArtifactPreview();
 });
 addButton.addEventListener("click", () => fileInput.click());
 expandPromptButton?.addEventListener("click", openPromptModal);
@@ -2167,29 +2199,25 @@ accessButton.addEventListener("click", () => {
 modelButton.addEventListener("click", toggleModelMenu);
 voiceButton.addEventListener("click", startVoiceInput);
 modelMenu.addEventListener("click", (event) => {
-  const reasoningRow = event.target.closest("[data-reasoning]");
+  const reasoningRow = closestElement(event.target, "[data-reasoning]");
   if (reasoningRow) {
     selectReasoning(reasoningRow.dataset.reasoning);
     return;
   }
-  const modelRow = event.target.closest("[data-model-choice]");
+  const modelRow = closestElement(event.target, "[data-model-choice]");
   if (modelRow) {
     selectModel(modelRow.dataset.modelChoice);
     return;
   }
-  if (event.target.closest("#moreModelsButton")) {
+  if (closestElement(event.target, "#moreModelsButton")) {
     closeModelMenu();
     showModels();
   }
 });
 document.addEventListener("click", async (event) => {
-  const artifactOpen = event.target.closest("[data-open-artifact-path]");
-  if (artifactOpen) {
-    showArtifact(artifactOpen.dataset.openArtifactPath);
-    return;
-  }
+  if (handleArtifactOpenEvent(event)) return;
 
-  const button = event.target.closest("[data-message-action='copy']");
+  const button = closestElement(event.target, "[data-message-action='copy']");
   if (!button) return;
   const entry = button.closest(".entry");
   const body = entry?.querySelector(".entry-body");
@@ -2234,7 +2262,7 @@ document.addEventListener("keydown", (event) => {
 document.addEventListener("click", (event) => {
   if (!document.body.classList.contains("show-panel")) return;
   if (window.matchMedia("(min-width: 1101px)").matches) return;
-  if (event.target.closest("[data-open-artifact-path]")) return;
+  if (closestElement(event.target, "[data-open-artifact-path]")) return;
   if (artifactPanel.contains(event.target) || menuButton.contains(event.target)) return;
   closeRightPanel({ restoreFocus: true });
 });

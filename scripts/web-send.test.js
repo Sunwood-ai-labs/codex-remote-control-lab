@@ -248,7 +248,13 @@ test("mobile artifact preview stays open when launched from chat and panel rows"
   });
 
   browser = await chromium.launch();
-  const page = await browser.newPage({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 1 });
+  const context = await browser.newContext({
+    viewport: { width: 390, height: 844 },
+    deviceScaleFactor: 1,
+    isMobile: true,
+    hasTouch: true,
+  });
+  const page = await context.newPage();
   await mockApi(page, {
     artifacts: [{ path: "README.md", name: "README.md", kind: "markdown" }],
     files: {
@@ -263,7 +269,11 @@ test("mobile artifact preview stays open when launched from chat and panel rows"
   await mockWebSocket(page);
   await page.goto(`${server.origin}/?token=${token}`, { waitUntil: "networkidle" });
 
-  await page.locator(".chat-artifact-card[data-open-artifact-path='README.md']").click();
+  const chatCard = page.locator(".chat-artifact-card[data-open-artifact-path='README.md']");
+  await chatCard.waitFor();
+  const chatCardBox = await chatCard.boundingBox();
+  assert.ok(chatCardBox);
+  await page.touchscreen.tap(chatCardBox.x + chatCardBox.width / 2, chatCardBox.y + chatCardBox.height / 2);
   await page.waitForSelector("#artifactPanel[aria-hidden='false']");
   assert.equal(await page.locator("body").evaluate((body) => body.classList.contains("show-panel")), true);
   await page.getByText("Rendered from a test artifact.").waitFor();
@@ -272,6 +282,49 @@ test("mobile artifact preview stays open when launched from chat and panel rows"
   await page.getByText("Rendered from a test artifact.").waitFor();
   assert.equal(await page.locator("#artifactPanel").getAttribute("aria-hidden"), "false");
   assert.equal(await page.locator("body").evaluate((body) => body.classList.contains("show-panel")), true);
+});
+
+test("mobile artifact card opens when the tap target is nested text", async (t) => {
+  const server = await startStaticServer();
+  let browser;
+  t.after(async () => {
+    if (browser) await browser.close();
+    await server.close();
+  });
+
+  browser = await chromium.launch();
+  const context = await browser.newContext({
+    viewport: { width: 390, height: 844 },
+    deviceScaleFactor: 1,
+    isMobile: true,
+    hasTouch: true,
+  });
+  const page = await context.newPage();
+  const pageErrors = [];
+  page.on("pageerror", (error) => pageErrors.push(error.message));
+  await mockApi(page, {
+    artifacts: [{ path: "README.md", name: "README.md", kind: "markdown" }],
+    files: {
+      "README.md": { path: "README.md", kind: "markdown", text: "# Artifact Preview\n\nRendered from nested text." },
+    },
+    review: {
+      clean: false,
+      files: [{ path: "README.md", status: "M", openable: true, additions: 1, deletions: 0 }],
+      totals: { additions: 1, deletions: 0 },
+    },
+  });
+  await mockWebSocket(page);
+  await page.goto(`${server.origin}/?token=${token}`, { waitUntil: "networkidle" });
+  await page.waitForSelector(".chat-artifact-card[data-open-artifact-path='README.md'] strong");
+
+  await page.evaluate(() => {
+    const textNode = document.querySelector(".chat-artifact-card[data-open-artifact-path='README.md'] strong").firstChild;
+    textNode.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, view: window }));
+  });
+
+  await page.waitForSelector("#artifactPanel[aria-hidden='false']");
+  await page.getByText("Rendered from nested text.").waitFor();
+  assert.deepEqual(pageErrors, []);
 });
 
 test("artifact card click still lets other document click handlers close menus", async (t) => {
