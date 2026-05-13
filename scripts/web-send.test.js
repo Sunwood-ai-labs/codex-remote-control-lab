@@ -56,7 +56,8 @@ async function mockApi(page, state = {}) {
       return;
     }
     if (url.pathname === "/api/artifacts") {
-      await route.fulfill({ json: { artifacts: [] } });
+      const artifacts = state.artifacts || [];
+      await route.fulfill({ json: { data: artifacts, artifacts } });
       return;
     }
     if (url.pathname === "/api/threads") {
@@ -64,7 +65,8 @@ async function mockApi(page, state = {}) {
         await route.abort("failed");
         return;
       }
-      await route.fulfill({ json: { data: state.threads || [] } });
+      const threads = state.threads || [];
+      await route.fulfill({ json: { data: threads, threads } });
       return;
     }
     if (url.pathname === "/api/thread") {
@@ -77,7 +79,26 @@ async function mockApi(page, state = {}) {
       return;
     }
     if (url.pathname === "/api/review") {
-      await route.fulfill({ json: { clean: true, files: [], totals: { additions: 0, deletions: 0 } } });
+      await route.fulfill({ json: state.review || { clean: true, files: [], totals: { additions: 0, deletions: 0 } } });
+      return;
+    }
+    if (url.pathname === "/api/file") {
+      const filePath = url.searchParams.get("path") || "";
+      const file = state.files?.[filePath] || { path: filePath, kind: "text", text: "" };
+      await route.fulfill({ json: file });
+      return;
+    }
+    if (url.pathname === "/api/skills") {
+      if (state.failSkillsOnce) {
+        state.failSkillsOnce = false;
+        await route.fulfill({ status: 503, json: { error: "skills temporarily unavailable" } });
+        return;
+      }
+      await route.fulfill({ json: { data: state.skills || [] } });
+      return;
+    }
+    if (url.pathname === "/api/plugins") {
+      await route.fulfill({ json: state.plugins || { marketplaces: [] } });
       return;
     }
     await route.fulfill({ json: {} });
@@ -218,7 +239,204 @@ test("background thread polling stays quiet after browser bridge disconnects", a
   assert.equal(await page.locator("#runState").getAttribute("data-state"), "disconnected");
 });
 
-test("thread switching keeps visible history until target history is ready", async (t) => {
+test("mobile artifact preview stays open when launched from chat and panel rows", async (t) => {
+  const server = await startStaticServer();
+  let browser;
+  t.after(async () => {
+    if (browser) await browser.close();
+    await server.close();
+  });
+
+  browser = await chromium.launch();
+  const page = await browser.newPage({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 1 });
+  await mockApi(page, {
+    artifacts: [{ path: "README.md", name: "README.md", kind: "markdown" }],
+    files: {
+      "README.md": { path: "README.md", kind: "markdown", text: "# Artifact Preview\n\nRendered from a test artifact." },
+    },
+    review: {
+      clean: false,
+      files: [{ path: "README.md", status: "M", openable: true, additions: 1, deletions: 0 }],
+      totals: { additions: 1, deletions: 0 },
+    },
+  });
+  await mockWebSocket(page);
+  await page.goto(`${server.origin}/?token=${token}`, { waitUntil: "networkidle" });
+
+  await page.locator(".chat-artifact-card[data-open-artifact-path='README.md']").click();
+  await page.waitForSelector("#artifactPanel[aria-hidden='false']");
+  assert.equal(await page.locator("body").evaluate((body) => body.classList.contains("show-panel")), true);
+  await page.getByText("Rendered from a test artifact.").waitFor();
+
+  await page.locator("#artifactList .artifact-row").first().click();
+  await page.getByText("Rendered from a test artifact.").waitFor();
+  assert.equal(await page.locator("#artifactPanel").getAttribute("aria-hidden"), "false");
+  assert.equal(await page.locator("body").evaluate((body) => body.classList.contains("show-panel")), true);
+});
+
+test("artifact card click still lets other document click handlers close menus", async (t) => {
+  const server = await startStaticServer();
+  let browser;
+  t.after(async () => {
+    if (browser) await browser.close();
+    await server.close();
+  });
+
+  browser = await chromium.launch();
+  const page = await browser.newPage({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 1 });
+  await mockApi(page, {
+    artifacts: [{ path: "README.md", name: "README.md", kind: "markdown" }],
+    files: {
+      "README.md": { path: "README.md", kind: "markdown", text: "# Artifact Preview\n\nRendered from a test artifact." },
+    },
+    review: {
+      clean: false,
+      files: [{ path: "README.md", status: "M", openable: true, additions: 1, deletions: 0 }],
+      totals: { additions: 1, deletions: 0 },
+    },
+  });
+  await mockWebSocket(page);
+  await page.goto(`${server.origin}/?token=${token}`, { waitUntil: "networkidle" });
+  await page.waitForSelector("#send:not([disabled])");
+
+  await page.evaluate(() => toggleModelMenu());
+  await page.waitForFunction(() => !document.querySelector("#modelMenu")?.classList.contains("hidden"));
+  await page.locator(".chat-artifact-card[data-open-artifact-path='README.md']").click();
+
+  await page.getByText("Rendered from a test artifact.").waitFor();
+  assert.equal(await page.locator("#artifactPanel").getAttribute("aria-hidden"), "false");
+  assert.equal(await page.locator("#modelMenu").evaluate((node) => node.classList.contains("hidden")), true);
+});
+
+test("slash opens installed skill menu and inserts the selected command", async (t) => {
+  const server = await startStaticServer();
+  let browser;
+  t.after(async () => {
+    if (browser) await browser.close();
+    await server.close();
+  });
+
+  browser = await chromium.launch();
+  const page = await browser.newPage({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 1 });
+  await mockApi(page, {
+    skills: [
+      { id: "browser-use:browser", name: "browser-use:browser", trigger: "/browser-use:browser", description: "Browser automation" },
+      { id: "github:github", name: "github:github", trigger: "/github:github", description: "GitHub triage" },
+    ],
+  });
+  await mockWebSocket(page);
+  await page.goto(`${server.origin}/?token=${token}`, { waitUntil: "networkidle" });
+  await page.waitForSelector("#send:not([disabled])");
+
+  await page.fill("#prompt", "please /bro");
+  await page.waitForSelector("#slashSkillMenu:not(.hidden)");
+  assert.match(await page.locator("#slashSkillMenu").innerText(), /browser-use:browser/);
+  assert.doesNotMatch(await page.locator("#slashSkillMenu").innerText(), /github:github/);
+
+  await page.press("#prompt", "Enter");
+  assert.equal(await page.inputValue("#prompt"), "please /browser-use:browser ");
+  assert.equal(await page.locator("#slashSkillMenu").evaluate((node) => node.classList.contains("hidden")), true);
+});
+
+test("slash skill menu retries after the first skills request fails", async (t) => {
+  const server = await startStaticServer();
+  let browser;
+  t.after(async () => {
+    if (browser) await browser.close();
+    await server.close();
+  });
+
+  browser = await chromium.launch();
+  const page = await browser.newPage({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 1 });
+  const apiState = {
+    failSkillsOnce: true,
+    skills: [{ id: "browser-use:browser", name: "browser-use:browser", trigger: "/browser-use:browser" }],
+  };
+  await mockApi(page, apiState);
+  await mockWebSocket(page);
+  await page.goto(`${server.origin}/?token=${token}`, { waitUntil: "networkidle" });
+  await page.waitForSelector("#send:not([disabled])");
+
+  await page.fill("#prompt", "/bro");
+  await page.getByText("スキルを読めませんでした: skills temporarily unavailable").waitFor();
+
+  await page.fill("#prompt", "retry /bro");
+  await page.waitForSelector("#slashSkillMenu:not(.hidden)");
+  assert.match(await page.locator("#slashSkillMenu").innerText(), /browser-use:browser/);
+});
+
+test("plugin panel defaults to installed and enabled entries only", async (t) => {
+  const server = await startStaticServer();
+  let browser;
+  t.after(async () => {
+    if (browser) await browser.close();
+    await server.close();
+  });
+
+  browser = await chromium.launch();
+  const page = await browser.newPage({ viewport: { width: 1280, height: 900 }, deviceScaleFactor: 1 });
+  await mockApi(page, {
+    plugins: {
+      marketplaces: [
+        {
+          id: "built-in",
+          entries: [
+            { summary: { id: "github", name: "GitHub", enabled: true } },
+            { summary: { id: "browser", name: "Browser", installed: true } },
+            { summary: { id: "marketplace-only", name: "Marketplace Only", installed: false, enabled: false } },
+            { summary: { id: "available-one", name: "Available One", status: "available" } },
+          ],
+        },
+      ],
+    },
+  });
+  await mockWebSocket(page);
+  await page.goto(`${server.origin}/?token=${token}`, { waitUntil: "networkidle" });
+
+  await page.click("#pluginsButton");
+  await page.getByText("GitHub").waitFor();
+
+  const panelText = await page.locator("#artifactList").innerText();
+  assert.match(panelText, /GitHub/);
+  assert.match(panelText, /Browser/);
+  assert.doesNotMatch(panelText, /Marketplace Only/);
+  assert.doesNotMatch(panelText, /Available One/);
+});
+
+test("plugin panel empty state explains when no plugins are installed", async (t) => {
+  const server = await startStaticServer();
+  let browser;
+  t.after(async () => {
+    if (browser) await browser.close();
+    await server.close();
+  });
+
+  browser = await chromium.launch();
+  const page = await browser.newPage({ viewport: { width: 1280, height: 900 }, deviceScaleFactor: 1 });
+  await mockApi(page, {
+    plugins: {
+      marketplaces: [
+        {
+          id: "available",
+          plugins: [
+            { summary: { id: "uninstalled", name: "Uninstalled Plugin", status: "available" } },
+          ],
+        },
+      ],
+    },
+  });
+  await mockWebSocket(page);
+  await page.goto(`${server.origin}/?token=${token}`, { waitUntil: "networkidle" });
+
+  await page.click("#pluginsButton");
+  await page.getByText("導入済み/有効なプラグインはありません").waitFor();
+
+  const panelText = await page.locator("#artifactList").innerText();
+  assert.match(panelText, /導入済み\/有効なプラグインはありません/);
+  assert.doesNotMatch(panelText, /Uninstalled Plugin/);
+});
+
+test("thread switching keeps a transition entry until target history is ready", async (t) => {
   const server = await startStaticServer();
   let browser;
   t.after(async () => {

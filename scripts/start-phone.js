@@ -586,6 +586,44 @@ function sendJson(res, status, body) {
   res.end(JSON.stringify(body));
 }
 
+function pluginIsInstalled(summary = {}) {
+  const status = String(summary.status || summary.installStatus || summary.installationStatus || "").toLowerCase();
+  return Boolean(summary.enabled || summary.installed || status === "installed" || status === "enabled");
+}
+
+function normalizeSkillEntry(skill, pluginSummary = {}, marketplace = {}) {
+  const source = skill?.summary || skill || {};
+  const name = source.name || source.title || source.id || pluginSummary.name || pluginSummary.id;
+  if (!name) return null;
+  return {
+    id: source.id || name,
+    name,
+    description: source.description || source.summary || pluginSummary.description || "",
+    trigger: source.trigger || source.command || `/${name}`,
+    pluginId: pluginSummary.id || pluginSummary.name || "",
+    pluginName: pluginSummary.name || pluginSummary.id || "",
+    marketplaceId: marketplace.id || marketplace.name || "",
+    marketplaceName: marketplace.name || marketplace.id || "",
+  };
+}
+
+function installedSkillsFromPluginMarketplaces(marketplaces = []) {
+  const byId = new Map();
+  for (const marketplace of marketplaces || []) {
+    for (const plugin of marketplace.plugins || marketplace.entries || []) {
+      const summary = plugin.summary || plugin;
+      if (!pluginIsInstalled(summary)) continue;
+      const skills = summary.skills || plugin.skills || summary.skillEntries || plugin.skillEntries || [];
+      const entries = skills.length ? skills : [summary];
+      for (const skill of entries) {
+        const normalized = normalizeSkillEntry(skill, summary, marketplace);
+        if (normalized) byId.set(normalized.id || normalized.name, normalized);
+      }
+    }
+  }
+  return Array.from(byId.values()).sort((a, b) => a.name.localeCompare(b.name));
+}
+
 function queryProvider(url, res) {
   try {
     return normalizeProvider(url.searchParams.get("provider") || agentProvider);
@@ -1924,6 +1962,21 @@ async function main() {
       try {
         const result = await appServerRequest("plugin/list", { cwds: [workdir] });
         sendJson(res, 200, result);
+      } catch (error) {
+        sendJson(res, 500, { error: error.message });
+      }
+      return;
+    }
+    if (url.pathname === "/api/skills") {
+      if (!requireToken(url, phoneToken, res)) return;
+      if (isClaudeProvider) {
+        sendJson(res, 200, { data: [] });
+        return;
+      }
+      try {
+        const result = await appServerRequest("plugin/list", { cwds: [workdir] });
+        const marketplaces = result.marketplaces || result.data || [];
+        sendJson(res, 200, { data: installedSkillsFromPluginMarketplaces(marketplaces), marketplaces });
       } catch (error) {
         sendJson(res, 500, { error: error.message });
       }
