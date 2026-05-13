@@ -70,6 +70,8 @@ const authMode = debugNoToken ? "debug-no-token" : "token";
 const tokenRequired = authMode === "token";
 const listenHost = tokenRequired || debugLan ? "0.0.0.0" : "127.0.0.1";
 const tokenPath = path.join(root, ".phone-token");
+const rateLimitCacheTtlMs = positiveNumber(process.env.PHONE_RATE_LIMIT_CACHE_TTL_MS, 5 * 60 * 1000);
+const rateLimitRefreshTimeoutMs = positiveNumber(process.env.PHONE_RATE_LIMIT_REFRESH_TIMEOUT_MS, 6000);
 const uploadDir = path.join(root, ".uploads");
 const bridges = new Map();
 const historyLimit = 80;
@@ -147,6 +149,181 @@ function parseMaybeJson(value) {
   } catch {
     return value;
   }
+}
+
+function positiveNumber(value, fallback) {
+  const number = Number(value);
+  return Number.isFinite(number) && number > 0 ? number : fallback;
+}
+
+function sanitizeRateLimitWindow(item) {
+  const label = String(item?.label || item?.window || item?.name || "").trim();
+  const resetsAt = String(item?.resetsAt || item?.resetAt || item?.reset || "").trim();
+  const remainingPercent = Number(item?.remainingPercent ?? item?.remaining ?? item?.percent);
+  if (!label && !resetsAt && !Number.isFinite(remainingPercent)) return null;
+  return {
+    label: label || "制限",
+    remainingPercent: Number.isFinite(remainingPercent) ? Math.max(0, Math.min(100, Math.round(remainingPercent))) : null,
+    resetsAt,
+  };
+}
+
+function normalizeRateLimitSnapshot(payload, fallbackSource = "unknown", provider = "codex") {
+  const rawWindows = Array.isArray(payload) ? payload : payload?.windows || payload?.limits || [];
+  const windows = (Array.isArray(rawWindows) ? rawWindows : []).map(sanitizeRateLimitWindow).filter(Boolean);
+  return {
+    provider: provider || payload?.provider || "codex",
+    source: String(payload?.source || fallbackSource),
+    updatedAt: payload?.updatedAt || new Date().toISOString(),
+    windows,
+  };
+}
+
+function providerEnvValue(provider, suffix, { legacyCodex = false } = {}) {
+  const normalizedProvider = normalizeProvider(provider);
+  const providerKey = normalizedProvider.toUpperCase();
+  const phoneKey = `PHONE_${providerKey}_${suffix}`;
+  const shortKey = `${providerKey}_${suffix}`;
+  if (process.env[phoneKey] !== undefined) return process.env[phoneKey];
+  if (process.env[shortKey] !== undefined) return process.env[shortKey];
+  if (legacyCodex && normalizedProvider === "codex") {
+    const legacyKey = `PHONE_${suffix}`;
+    if (process.env[legacyKey] !== undefined) return process.env[legacyKey];
+  }
+  return undefined;
+}
+
+function envRateLimitSnapshot(provider) {
+  if (provider !== "codex") return null;
+  const json = providerEnvValue(provider, "RATE_LIMITS_JSON", { legacyCodex: true });
+  if (json) {
+    try {
+      return normalizeRateLimitSnapshot(JSON.parse(json), "env", provider);
+    } catch (error) {
+      return { provider, source: "env", windows: [], error: error.message };
+    }
+  }
+  const hasShortLimit = ["RATE_LIMIT_SHORT_LABEL", "RATE_LIMIT_SHORT_PERCENT", "RATE_LIMIT_SHORT_RESET"].some(
+    (suffix) => providerEnvValue(provider, suffix, { legacyCodex: true }) !== undefined,
+  );
+  const hasWeeklyLimit = ["RATE_LIMIT_WEEKLY_LABEL", "RATE_LIMIT_WEEKLY_PERCENT", "RATE_LIMIT_WEEKLY_RESET"].some(
+    (suffix) => providerEnvValue(provider, suffix, { legacyCodex: true }) !== undefined,
+  );
+  const windows = [
+    hasShortLimit
+      ? sanitizeRateLimitWindow({
+          label: providerEnvValue(provider, "RATE_LIMIT_SHORT_LABEL", { legacyCodex: true }) || "5時間",
+          remainingPercent: providerEnvValue(provider, "RATE_LIMIT_SHORT_PERCENT", { legacyCodex: true }),
+          resetsAt: providerEnvValue(provider, "RATE_LIMIT_SHORT_RESET", { legacyCodex: true }),
+        })
+      : null,
+    hasWeeklyLimit
+      ? sanitizeRateLimitWindow({
+          label: providerEnvValue(provider, "RATE_LIMIT_WEEKLY_LABEL", { legacyCodex: true }) || "週あたり",
+          remainingPercent: providerEnvValue(provider, "RATE_LIMIT_WEEKLY_PERCENT", { legacyCodex: true }),
+          resetsAt: providerEnvValue(provider, "RATE_LIMIT_WEEKLY_RESET", { legacyCodex: true }),
+        })
+      : null,
+  ].filter(Boolean);
+  return windows.length ? { provider, source: "env", updatedAt: new Date().toISOString(), windows } : null;
+}
+
+function rateLimitCachePathForProvider(provider) {
+  if (provider !== "codex") return "";
+  const configured = providerEnvValue(provider, "RATE_LIMIT_CACHE_PATH", { legacyCodex: true });
+  return configured ? path.resolve(configured) : path.join(root, ".phone-rate-limits.json");
+}
+
+function readRateLimitCache(provider) {
+  const cachePath = rateLimitCachePathForProvider(provider);
+  if (!cachePath || !fs.existsSync(cachePath)) return null;
+  try {
+    const snapshot = normalizeRateLimitSnapshot(JSON.parse(fs.readFileSync(cachePath, "utf8")), "cache", provider);
+    const updatedAtMs = Date.parse(snapshot.updatedAt);
+    if (Number.isFinite(updatedAtMs)) snapshot.stale = Date.now() - updatedAtMs > rateLimitCacheTtlMs;
+    return snapshot;
+  } catch (error) {
+    return { provider, source: "cache", windows: [], error: error.message };
+  }
+}
+
+function writeRateLimitCache(provider, snapshot) {
+  const cachePath = rateLimitCachePathForProvider(provider);
+  if (!cachePath) return;
+  try {
+    fs.writeFileSync(cachePath, `${JSON.stringify(snapshot, null, 2)}\n`, { mode: 0o600 });
+  } catch {
+    return;
+  }
+  try {
+    fs.chmodSync(cachePath, 0o600);
+  } catch {
+    // Best effort: rate-limit metadata remains usable if chmod is unavailable.
+  }
+}
+
+function runRateLimitRefreshCommand(provider, command) {
+  return new Promise((resolve, reject) => {
+    let stdout = "";
+    let stderr = "";
+    const child = spawn(command, {
+      cwd: root,
+      env: process.env,
+      shell: true,
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    const timer = setTimeout(() => {
+      child.kill("SIGTERM");
+      reject(new Error(`rate limit command timed out after ${rateLimitRefreshTimeoutMs}ms`));
+    }, rateLimitRefreshTimeoutMs);
+    child.stdout.on("data", (chunk) => {
+      stdout += chunk.toString("utf8");
+      if (stdout.length > 64_000) child.kill("SIGTERM");
+    });
+    child.stderr.on("data", (chunk) => {
+      stderr += chunk.toString("utf8");
+      if (stderr.length > 8_000) stderr = stderr.slice(-8_000);
+    });
+    child.on("error", (error) => {
+      clearTimeout(timer);
+      reject(error);
+    });
+    child.on("close", (code, signal) => {
+      clearTimeout(timer);
+      if (code !== 0) {
+        reject(new Error((stderr || `rate limit command exited with ${signal || code}`).trim()));
+        return;
+      }
+      try {
+        const snapshot = normalizeRateLimitSnapshot(JSON.parse(stdout), "command", provider);
+        if (!snapshot.windows.length) throw new Error("rate limit command returned no windows");
+        resolve(snapshot);
+      } catch (error) {
+        reject(new Error(`invalid rate limit command output: ${error.message}`));
+      }
+    });
+  });
+}
+
+async function rateLimitSnapshot({ provider = agentProvider, refresh = false } = {}) {
+  const normalizedProvider = normalizeProvider(provider);
+  if (normalizedProvider !== "codex") return { provider: normalizedProvider, source: "unavailable", windows: [] };
+  const envSnapshot = envRateLimitSnapshot(normalizedProvider);
+  if (envSnapshot) return envSnapshot;
+  const command = String(providerEnvValue(normalizedProvider, "RATE_LIMIT_REFRESH_COMMAND", { legacyCodex: true }) || "").trim();
+  const cached = readRateLimitCache(normalizedProvider);
+  if (refresh && command) {
+    try {
+      const snapshot = await runRateLimitRefreshCommand(normalizedProvider, command);
+      writeRateLimitCache(normalizedProvider, snapshot);
+      return snapshot;
+    } catch (error) {
+      if (cached && cached.windows?.length) return { ...cached, stale: true, error: error.message };
+      return { provider: normalizedProvider, source: "command", windows: [], error: error.message };
+    }
+  }
+  if (cached) return cached;
+  return { provider: normalizedProvider, source: command ? "command" : "unavailable", windows: [] };
 }
 
 function pickCodexError(raw) {
@@ -1532,6 +1709,7 @@ async function main() {
     }
     if (url.pathname === "/api/status") {
       if (!requireToken(url, phoneToken, res)) return;
+      const refreshRateLimits = url.searchParams.get("refreshRateLimits") === "1";
       sendJson(res, 200, {
         provider: agentProvider,
         workdir,
@@ -1542,6 +1720,7 @@ async function main() {
         historySyncEnabled,
         tokenRequired,
         authMode,
+        rateLimits: await rateLimitSnapshot({ provider: agentProvider, refresh: refreshRateLimits }),
         uiPort,
         codexPort,
         bridges: Array.from(bridges.values()).map((bridge) => ({

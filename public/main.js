@@ -266,6 +266,36 @@ function toggleModelMenu() {
   modelButton.setAttribute("aria-expanded", expanded);
 }
 
+function normalizeRateLimitWindows(rateLimits) {
+  const rawWindows = Array.isArray(rateLimits) ? rateLimits : rateLimits?.windows || rateLimits?.limits || [];
+  return rawWindows
+    .map((item) => {
+      const remainingPercent = Number(item.remainingPercent ?? item.remaining ?? item.percent);
+      const label = String(item.label || item.window || item.name || "").trim();
+      const resetsAt = String(item.resetsAt || item.resetAt || item.reset || "").trim();
+      if (!label && !Number.isFinite(remainingPercent) && !resetsAt) return null;
+      return {
+        label: label || "制限",
+        remainingPercent: Number.isFinite(remainingPercent) ? Math.max(0, Math.min(100, Math.round(remainingPercent))) : null,
+        resetsAt,
+      };
+    })
+    .filter(Boolean);
+}
+
+function addRateLimitPanelRows(rateLimits) {
+  const windows = normalizeRateLimitWindows(rateLimits);
+  if (!windows.length) {
+    const detail = rateLimits?.error ? "取得エラー" : rateLimits?.source === "unavailable" ? "取得元未設定" : "未取得";
+    addPanelRow("レート制限", detail);
+    return;
+  }
+  for (const item of windows) {
+    const percent = item.remainingPercent === null ? "--" : `${item.remainingPercent}%`;
+    addPanelRow(`レート制限 ${item.label}`, item.resetsAt ? `${percent} / ${item.resetsAt}` : percent);
+  }
+}
+
 function selectReasoning(value) {
   selectedReasoning = value;
   localStorage.setItem("codexPhoneReasoning", value);
@@ -1403,10 +1433,11 @@ function startVoiceInput() {
 async function showStatus() {
   clearPanel("バックグラウンド", "status");
   try {
-    const result = await apiGet("/api/status");
+    const result = await apiGet("/api/status?refreshRateLimits=1");
     addPanelRow("Provider", result.provider || activeProvider);
     addPanelRow("UI port", String(result.uiPort));
     addPanelRow("Codex app-server", result.codexUrl || "未使用");
+    addRateLimitPanelRows(result.rateLimits || null);
     addPanelRow("履歴同期", result.historySyncEnabled ? "有効" : "無効");
     addPanelRow("作業ディレクトリ", result.workdir);
     for (const bridge of result.bridges || []) {
