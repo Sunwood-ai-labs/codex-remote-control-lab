@@ -4,7 +4,14 @@ const path = require("path");
 const test = require("node:test");
 const assert = require("node:assert/strict");
 
-const { findSlashCommand, parseSlashInput, readSlashCommands, renderSlashTemplate } = require("./slash-commands");
+const {
+  findSlashCommand,
+  parseSlashInput,
+  publicSlashCommandMetadata,
+  readSlashCommands,
+  renderSlashTemplate,
+  shellCommandForSlash,
+} = require("./slash-commands");
 
 test("parses slash command name and args", () => {
   assert.deepEqual(parseSlashInput(" /compact "), { raw: "/compact", command: "compact", args: "" });
@@ -22,7 +29,7 @@ test("exposes bridge-native built-in slash commands", () => {
   assert.equal(findSlashCommand(commands, "help").name, "commands");
 });
 
-test("loads prompt and shell slash command extensions from local json", () => {
+test("loads prompt slash command extensions but rejects local shell extensions", () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "codex-slash-"));
   const file = path.join(dir, "slash.json");
   fs.writeFileSync(
@@ -36,10 +43,30 @@ test("loads prompt and shell slash command extensions from local json", () => {
 
   const commands = readSlashCommands(dir, { PHONE_SLASH_COMMANDS_FILE: file });
   assert.equal(findSlashCommand(commands, "handoff").kind, "prompt");
-  assert.equal(findSlashCommand(commands, "shortstat").kind, "shell");
+  assert.equal(findSlashCommand(commands, "shortstat"), null);
   assert.equal(findSlashCommand(commands, "ignored"), null);
 });
 
 test("renders extension prompt templates", () => {
   assert.equal(renderSlashTemplate("review {{args}} from /{{command}}", "src", { command: "x" }), "review src from /x");
+});
+
+test("only built-in diff maps to fixed shell commands", () => {
+  const commands = readSlashCommands(process.cwd(), {});
+  assert.equal(shellCommandForSlash(findSlashCommand(commands, "diff"), { args: "" }), "git status --short && git diff --stat");
+  assert.equal(shellCommandForSlash(findSlashCommand(commands, "diff"), { args: "full" }), "git diff -- .");
+  assert.equal(shellCommandForSlash({ name: "shortstat", kind: "shell", command: "git diff {{args}}" }, { args: "; rm -rf ." }), "");
+});
+
+test("public slash command metadata does not expose prompt templates or shell bodies", () => {
+  const metadata = publicSlashCommandMetadata([
+    { name: "handoff", kind: "prompt", aliases: [], usage: "/handoff", description: "handoff", template: "secret {{args}}" },
+    { name: "diff", kind: "shell", aliases: [], usage: "/diff", description: "diff", command: "git diff --stat" },
+  ]);
+  assert.deepEqual(metadata, [
+    { name: "handoff", aliases: [], kind: "prompt", usage: "/handoff", description: "handoff" },
+    { name: "diff", aliases: [], kind: "shell", usage: "/diff", description: "diff" },
+  ]);
+  assert.equal(Object.hasOwn(metadata[0], "template"), false);
+  assert.equal(Object.hasOwn(metadata[1], "command"), false);
 });

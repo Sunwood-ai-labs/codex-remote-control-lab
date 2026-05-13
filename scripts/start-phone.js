@@ -9,7 +9,14 @@ const WebSocket = require("ws");
 const { bridgeKeyForRequest, shouldDisposeIdleBridge, shouldPromoteBridgeKey } = require("./bridge-state");
 const { isHistorySyncEnabled, runHistorySync } = require("./history-sync");
 const { bridgeUrls, notifyBridgeUrls } = require("./phone-notify");
-const { findSlashCommand, parseSlashInput, readSlashCommands, renderSlashTemplate } = require("./slash-commands");
+const {
+  findSlashCommand,
+  parseSlashInput,
+  publicSlashCommandMetadata,
+  readSlashCommands,
+  renderSlashTemplate,
+  shellCommandForSlash,
+} = require("./slash-commands");
 const { findLiveBridge, readThreadSnapshot } = require("./thread-read");
 
 const root = path.resolve(__dirname, "..");
@@ -979,14 +986,9 @@ class SharedBridge {
       return;
     }
     if (command.kind === "shell") {
-      const shellCommand =
-        command.name === "diff"
-          ? parsed.args === "full"
-            ? "git diff -- ."
-            : "git status --short && git diff --stat"
-          : renderSlashTemplate(command.command, parsed.args, parsed);
+      const shellCommand = shellCommandForSlash(command, parsed);
       if (!shellCommand.trim()) {
-        this.emit("status", { text: `/${command.name} の shell command が未設定です。` });
+        this.emit("status", { text: `/${command.name} は固定 allowlist にないため実行できません。` });
         return;
       }
       const id = this.request("thread/shellCommand", { threadId: this.threadId, command: shellCommand });
@@ -1210,7 +1212,7 @@ async function main() {
     }
     if (url.pathname === "/api/slash-commands") {
       if (!requireToken(url, phoneToken, res)) return;
-      sendJson(res, 200, { data: currentSlashCommands() });
+      sendJson(res, 200, { data: publicSlashCommandMetadata(currentSlashCommands()) });
       return;
     }
     if (url.pathname === "/api/artifacts") {

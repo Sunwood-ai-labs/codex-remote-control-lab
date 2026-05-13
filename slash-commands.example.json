@@ -7,10 +7,10 @@
     "template": "この session の引き継ぎメモを簡潔に作成してください。焦点: {{args}}"
   },
   {
-    "name": "shortstat",
-    "kind": "shell",
-    "usage": "/shortstat",
-    "description": "Git diff の短い統計を表示します。",
-    "command": "git diff --shortstat"
+    "name": "summary",
+    "kind": "prompt",
+    "usage": "/summary [focus]",
+    "description": "現在の状況を指定した観点で要約します。",
+    "template": "現在の状況を要約してください。観点: {{args}}"
   }
 ]
