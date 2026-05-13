@@ -81,6 +81,9 @@ let settingsRenderSeq = 0;
 let artifactItems = [];
 let activeArtifactPath = "";
 let activePanel = "artifacts";
+let currentWorkdir = "";
+let nextThreadCwd = "";
+let forceNewThreadOnce = false;
 let accessMode = {
   label: "フルアクセス",
   approvalPolicy: "never",
@@ -814,7 +817,7 @@ function renderThreadList() {
   newProject.type = "button";
   newProject.className = selectedThread ? "project-heading new-project" : "project-heading new-project active";
   newProject.innerHTML = `${fontAwesomeIcon("folderPlus", "project-icon")}<span>New project</span>`;
-  newProject.addEventListener("click", () => selectThread(""));
+  newProject.addEventListener("click", startNewThread);
   threadList.appendChild(newProject);
 
   const groups = new Map();
@@ -972,6 +975,22 @@ function selectThread(threadId) {
   connect();
 }
 
+function setCurrentWorkdir(workdir) {
+  currentWorkdir = workdir || currentWorkdir || "";
+}
+
+function startNewThread() {
+  forceNewThreadOnce = true;
+  nextThreadCwd = "";
+  selectThread("");
+}
+
+function startNewThreadInCwd(cwd) {
+  forceNewThreadOnce = true;
+  nextThreadCwd = cwd;
+  selectThread("");
+}
+
 function showRightPanel({ focus = false } = {}) {
   document.body.classList.remove("hide-artifacts");
   document.body.classList.add("show-panel");
@@ -1099,6 +1118,47 @@ async function showAutomations() {
     if (!artifactList.children.length) addPanelRow("登録済みオートメーションはありません");
   } catch (error) {
     showToolError("オートメーション", error);
+  }
+}
+
+async function showSkills() {
+  clearPanel("スキル", "sources");
+  addPanelRow("読み込み中...");
+  try {
+    const result = await apiGet("/api/skills");
+    artifactList.replaceChildren();
+    for (const skill of result.data || []) {
+      addPanelRow(skill.name, skill.description || skill.source || "", () => {
+        appendToPrompt(`$${skill.name}\n\nこのスキルの手順に従って進めて。`);
+        addStatus(`$${skill.name} をチャット入力へ追加しました。`);
+      }, "SK");
+    }
+    if (!artifactList.children.length) addPanelRow("利用可能なスキルは見つかりませんでした");
+  } catch (error) {
+    showToolError("スキル", error);
+  }
+}
+
+async function showFolderBrowser(pathValue = "", showHidden = false) {
+  clearPanel("フォルダ", "workspace");
+  addPanelRow("読み込み中...");
+  const query = new URLSearchParams();
+  if (pathValue) query.set("path", pathValue);
+  if (showHidden) query.set("hidden", "1");
+  try {
+    const suffix = query.toString() ? `?${query}` : "";
+    const listing = await apiGet(`/api/fs/list${suffix}`);
+    artifactList.replaceChildren();
+    artifactList.classList.add("artifact-browser-list");
+    addPanelRow("このフォルダで新しいチャット", listing.path, () => startNewThreadInCwd(listing.path), "NEW");
+    addPanelRow(showHidden ? "隠しフォルダを非表示" : "隠しフォルダを表示", listing.path, () => showFolderBrowser(listing.path, !showHidden), "VIS");
+    if (listing.parent) addPanelRow("親フォルダへ", listing.parent, () => showFolderBrowser(listing.parent, showHidden), "UP");
+    for (const entry of listing.entries || []) {
+      addPanelRow(entry.name, entry.path, () => showFolderBrowser(entry.path, showHidden), "DIR");
+    }
+    if (!listing.entries?.length) addPanelRow("下位フォルダはありません", listing.path);
+  } catch (error) {
+    showToolError("フォルダ", error);
   }
 }
 
@@ -1267,7 +1327,9 @@ function showSources() {
     appendToPrompt("Web調査を使って確認してください。");
     addStatus("Web調査指示をチャット入力へ追加しました。");
   }, "WEB");
+  addPanelRow("スキル", "利用可能な skill を入力へ追加", showSkills, "SK");
   addPanelRow("ローカルファイル", "Filesタブから @path を追加できます", showWorkspace, "FILE");
+  addPanelRow("フォルダを選んで新しいチャット", "home 配下のフォルダだけ表示", () => showFolderBrowser(currentWorkdir), "DIR");
   addPanelRow("差分レビュー", "Diffタブから変更ファイルを追加できます", showReview, "DIFF");
 }
 
@@ -1490,6 +1552,12 @@ function connect() {
   const query = new URLSearchParams();
   if (tokenRequired && token) query.set("token", token);
   if (selectedThread) query.set("thread", selectedThread);
+  if (!selectedThread) {
+    if (nextThreadCwd) query.set("cwd", nextThreadCwd);
+    if (forceNewThreadOnce) query.set("new", "1");
+  }
+  forceNewThreadOnce = false;
+  nextThreadCwd = "";
   const bridgeQuery = query.toString();
   ws = new WebSocket(`${proto}//${location.host}/bridge${bridgeQuery ? `?${bridgeQuery}` : ""}`);
   connectButton.disabled = true;
@@ -1504,6 +1572,7 @@ function connect() {
     const msg = JSON.parse(event.data);
     if (msg.type === "ready") {
       setReady(true);
+      setCurrentWorkdir(msg.workdir);
       syncReadyThread(msg.threadId);
       renderHistoryIfChanged(msg.history || []);
       meta.textContent = `${msg.model}  •  ${msg.clients}端末  •  ${msg.workdir}`;

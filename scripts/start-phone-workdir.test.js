@@ -10,7 +10,14 @@ const workdir = path.join(tempRoot, "active-workspace");
 fs.mkdirSync(workdir, { recursive: true });
 process.env.CODEX_WORKDIR = workdir;
 
-const { discoverWorkspaceEntries, reviewSummary, safeOpenPath } = require("./start-phone");
+const {
+  discoverWorkspaceEntries,
+  readDirectoryListing,
+  readSkills,
+  reviewSummary,
+  safeDirectoryPath,
+  safeOpenPath,
+} = require("./start-phone");
 
 function runGit(args) {
   const result = spawnSync("git", args, { cwd: workdir, encoding: "utf8" });
@@ -56,4 +63,36 @@ test("reviewSummary marks CODEX_WORKDIR git paths as openable", async () => {
   assert.equal(reviewFile?.kind, "markdown");
   assert.equal(spacedFile?.openable, true);
   assert.equal(spacedFile?.additions, 1);
+});
+
+test("safeDirectoryPath and readDirectoryListing stay inside the provided root", () => {
+  const homeRoot = path.join(tempRoot, "home");
+  const child = path.join(homeRoot, "project-a");
+  const hidden = path.join(homeRoot, ".hidden-project");
+  fs.mkdirSync(child, { recursive: true });
+  fs.mkdirSync(hidden, { recursive: true });
+
+  assert.equal(safeDirectoryPath(child, homeRoot)?.absolute, fs.realpathSync(child));
+  assert.equal(safeDirectoryPath(path.dirname(homeRoot), homeRoot), null);
+
+  const visibleListing = readDirectoryListing(homeRoot, false, homeRoot);
+  assert.deepEqual(visibleListing.entries.map((entry) => entry.name), ["project-a"]);
+
+  const hiddenListing = readDirectoryListing(homeRoot, true, homeRoot);
+  assert.deepEqual(hiddenListing.entries.map((entry) => entry.name), [".hidden-project", "project-a"]);
+});
+
+test("readSkills returns public skill metadata without absolute paths", () => {
+  const codexHome = path.join(tempRoot, "codex-home");
+  const skillDir = path.join(codexHome, "skills", "sample-skill");
+  fs.mkdirSync(skillDir, { recursive: true });
+  fs.writeFileSync(
+    path.join(skillDir, "SKILL.md"),
+    "---\ndescription: Sample workflow\n---\n\n# Sample Skill\n",
+    "utf8",
+  );
+
+  assert.deepEqual(readSkills({ codexSkillsDir: path.join(codexHome, "skills"), agentSkillsDir: "" }), [
+    { name: "sample-skill", description: "Sample workflow", source: "codex" },
+  ]);
 });
