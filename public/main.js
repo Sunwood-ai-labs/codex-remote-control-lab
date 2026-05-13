@@ -1428,6 +1428,13 @@ function showToolError(name, error) {
   document.body.classList.remove("show-sidebar");
 }
 
+function getPluginStatus(summary = {}) {
+  const state = String(summary.status || summary.state || "").toLowerCase();
+  if (summary.enabled || state === "enabled") return "enabled";
+  if (summary.installed || state === "installed") return "installed";
+  return null;
+}
+
 async function showPlugins() {
   clearPanel("プラグイン");
   addPanelRow("読み込み中...");
@@ -1437,13 +1444,14 @@ async function showPlugins() {
     artifactList.replaceChildren();
     for (const marketplace of marketplaces) {
       const plugins = marketplace.plugins || marketplace.entries || [];
-      if (!plugins.length) addPanelRow(marketplace.name || marketplace.id || "marketplace", "プラグインなし");
       for (const plugin of plugins) {
-        const summary = plugin.summary || plugin;
-        addPanelRow(summary.name || summary.id, summary.enabled ? "enabled" : summary.installed ? "installed" : "available");
+        const summary = plugin?.summary || plugin || {};
+        const status = getPluginStatus(summary);
+        if (!status) continue;
+        addPanelRow(summary.name || summary.id, status);
       }
     }
-    if (!artifactList.children.length) addPanelRow("プラグインは見つかりませんでした");
+    if (!artifactList.children.length) addPanelRow("導入済み/有効なプラグインはありません");
   } catch (error) {
     showToolError("プラグイン", error);
   }
