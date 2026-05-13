@@ -1664,6 +1664,97 @@ textarea::placeholder {
   color: color-mix(in srgb, var(--muted) 78%, transparent);
 }
 
+body.prompt-modal-open {
+  overflow: hidden;
+}
+
+.prompt-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: grid;
+  place-items: center;
+  padding: max(18px, env(safe-area-inset-top)) 18px max(18px, env(safe-area-inset-bottom));
+  background: color-mix(in srgb, var(--scrim) 72%, transparent);
+}
+
+.prompt-modal.hidden {
+  display: none;
+}
+
+.prompt-modal-card {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  width: min(900px, 100%);
+  height: min(760px, 100%);
+  min-height: 0;
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  background: var(--card);
+  box-shadow: 0 24px 70px color-mix(in srgb, var(--text) 18%, transparent);
+  overflow: hidden;
+}
+
+.prompt-modal-header,
+.prompt-modal-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px;
+}
+
+.prompt-modal-header {
+  border-bottom: 1px solid var(--line);
+}
+
+.prompt-modal-header h2 {
+  margin: 0;
+  color: var(--text);
+  font-size: 16px;
+}
+
+.prompt-modal-close {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--soft);
+  color: var(--muted);
+}
+
+.prompt-modal-input {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  max-height: none;
+  resize: none;
+  padding: 18px;
+  font-size: 17px;
+  line-height: 1.58;
+}
+
+.prompt-modal-footer {
+  border-top: 1px solid var(--line);
+}
+
+.prompt-modal-footer button {
+  min-height: 42px;
+  border: 1px solid var(--button);
+  border-radius: 11px;
+  padding: 0 18px;
+  background: var(--button);
+  color: var(--button-text);
+}
+
+.prompt-modal-footer .secondary {
+  border-color: var(--line);
+  background: var(--card);
+  color: var(--text);
+}
+
 .sr-only {
   position: absolute;
   width: 1px;
@@ -1692,6 +1783,7 @@ textarea::placeholder {
 .ghost-button,
 .access-button,
 .model-button,
+.expand-button,
 .voice-button {
   display: inline-flex;
   align-items: center;
@@ -1709,6 +1801,7 @@ textarea::placeholder {
 .access-button:hover,
 .model-button:hover,
 .thinking-button:hover,
+.expand-button:hover,
 .voice-button:hover {
   background: var(--hover);
   color: var(--nav-text);
@@ -1745,6 +1838,11 @@ textarea::placeholder {
   width: 9px;
   height: 9px;
   opacity: 0.72;
+}
+
+.expand-button {
+  width: 30px;
+  padding: 0;
 }
 
 .voice-button {
@@ -2629,6 +2727,7 @@ textarea::placeholder {
   .access-button,
   .model-button,
   .thinking-button,
+  .expand-button,
   .voice-button {
     padding-inline: 5px;
     min-height: 30px;
@@ -2636,6 +2735,7 @@ textarea::placeholder {
   }
 
   .thinking-button,
+  .expand-button,
   .voice-button {
     width: 30px;
   }
@@ -2718,6 +2818,22 @@ textarea::placeholder {
   .composer {
     min-height: 72px;
     border-radius: 12px;
+  }
+
+  .prompt-modal {
+    align-items: stretch;
+    padding: max(10px, env(safe-area-inset-top)) 10px max(10px, env(safe-area-inset-bottom));
+  }
+
+  .prompt-modal-card {
+    width: 100%;
+    height: 100%;
+    border-radius: 16px;
+  }
+
+  .prompt-modal-input {
+    padding: 14px;
+    font-size: 16px;
   }
 
   .composer-footer {
