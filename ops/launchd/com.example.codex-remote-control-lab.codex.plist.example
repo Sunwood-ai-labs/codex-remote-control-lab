@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.example.codex-remote-control-lab.codex</string>
+
+  <key>WorkingDirectory</key>
+  <string>&lt;repo-root&gt;</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/zsh</string>
+    <string>-lc</string>
+    <string>cd "$CODEX_REMOTE_CONTROL_LAB_ROOT" &amp;&amp; ./node_modules/.bin/codex app-server --listen ws://127.0.0.1:45213</string>
+  </array>
+
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>CODEX_REMOTE_CONTROL_LAB_ROOT</key>
+    <string>&lt;repo-root&gt;</string>
+    <key>PATH</key>
+    <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+  </dict>
+
+  <key>RunAtLoad</key>
+  <true/>
+
+  <key>KeepAlive</key>
+  <dict>
+    <key>SuccessfulExit</key>
+    <false/>
+  </dict>
+
+  <key>StandardOutPath</key>
+  <string>&lt;log-dir&gt;/codex-app-server.out.log</string>
+
+  <key>StandardErrorPath</key>
+  <string>&lt;log-dir&gt;/codex-app-server.err.log</string>
+</dict>
+</plist>
