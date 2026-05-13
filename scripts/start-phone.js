@@ -1849,7 +1849,6 @@ class ClaudeBridge {
 
     const args = [
       "-p",
-      promptText,
       "--output-format",
       "stream-json",
       "--verbose",
@@ -1864,8 +1863,9 @@ class ClaudeBridge {
     const child = spawn(claudeBin, args, {
       cwd: workdir,
       env: process.env,
-      stdio: ["ignore", "pipe", "pipe"],
+      stdio: ["pipe", "pipe", "pipe"],
     });
+    child.stdin.end(promptText);
     this.activeProcess = child;
     let stdoutBuffer = "";
     let stderrBuffer = "";
