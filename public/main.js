@@ -1290,6 +1290,22 @@ function showToolError(name, error) {
   document.body.classList.remove("show-sidebar");
 }
 
+function pluginSummary(plugin) {
+  return plugin?.summary || plugin || {};
+}
+
+function isInstalledPlugin(plugin) {
+  const summary = pluginSummary(plugin);
+  const state = String(summary.status || summary.state || "").toLowerCase();
+  return summary.enabled === true || summary.installed === true || state === "enabled" || state === "installed";
+}
+
+function pluginStatusLabel(plugin) {
+  const summary = pluginSummary(plugin);
+  if (summary.enabled === true || String(summary.status || summary.state || "").toLowerCase() === "enabled") return "enabled";
+  return "installed";
+}
+
 async function showPlugins() {
   clearPanel("プラグイン");
   addPanelRow("読み込み中...");
@@ -1299,13 +1315,13 @@ async function showPlugins() {
     artifactList.replaceChildren();
     for (const marketplace of marketplaces) {
       const plugins = marketplace.plugins || marketplace.entries || [];
-      if (!plugins.length) addPanelRow(marketplace.name || marketplace.id || "marketplace", "プラグインなし");
       for (const plugin of plugins) {
-        const summary = plugin.summary || plugin;
-        addPanelRow(summary.name || summary.id, summary.enabled ? "enabled" : summary.installed ? "installed" : "available");
+        if (!isInstalledPlugin(plugin)) continue;
+        const summary = pluginSummary(plugin);
+        addPanelRow(summary.name || summary.id, pluginStatusLabel(plugin));
       }
     }
-    if (!artifactList.children.length) addPanelRow("プラグインは見つかりませんでした");
+    if (!artifactList.children.length) addPanelRow("導入済み/有効なプラグインはありません");
   } catch (error) {
     showToolError("プラグイン", error);
   }

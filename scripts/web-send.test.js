@@ -71,6 +71,10 @@ async function mockApi(page, state = {}) {
       await route.fulfill({ json: { clean: true, files: [], totals: { additions: 0, deletions: 0 } } });
       return;
     }
+    if (url.pathname === "/api/plugins") {
+      await route.fulfill({ json: state.plugins || { marketplaces: [] } });
+      return;
+    }
     await route.fulfill({ json: {} });
   });
 }
@@ -194,4 +198,75 @@ test("background thread polling stays quiet after browser bridge disconnects", a
   const logText = await page.locator("#log").innerText();
   assert.doesNotMatch(logText, /thread一覧を読めませんでした: Failed to fetch/);
   assert.equal(await page.locator("#runState").getAttribute("data-state"), "disconnected");
+});
+
+test("plugin panel defaults to installed and enabled entries only", async (t) => {
+  const server = await startStaticServer();
+  let browser;
+  t.after(async () => {
+    if (browser) await browser.close();
+    await server.close();
+  });
+
+  browser = await chromium.launch();
+  const page = await browser.newPage({ viewport: { width: 1280, height: 900 }, deviceScaleFactor: 1 });
+  await mockApi(page, {
+    plugins: {
+      marketplaces: [
+        {
+          id: "built-in",
+          entries: [
+            { summary: { id: "github", name: "GitHub", enabled: true } },
+            { summary: { id: "browser", name: "Browser", installed: true } },
+            { summary: { id: "marketplace-only", name: "Marketplace Only", installed: false, enabled: false } },
+            { summary: { id: "available-one", name: "Available One", status: "available" } },
+          ],
+        },
+      ],
+    },
+  });
+  await mockWebSocket(page);
+  await page.goto(`${server.origin}/?token=${token}`, { waitUntil: "networkidle" });
+
+  await page.click("#pluginsButton");
+  await page.getByText("GitHub").waitFor();
+
+  const panelText = await page.locator("#artifactList").innerText();
+  assert.match(panelText, /GitHub/);
+  assert.match(panelText, /Browser/);
+  assert.doesNotMatch(panelText, /Marketplace Only/);
+  assert.doesNotMatch(panelText, /Available One/);
+});
+
+test("plugin panel empty state explains when no plugins are installed", async (t) => {
+  const server = await startStaticServer();
+  let browser;
+  t.after(async () => {
+    if (browser) await browser.close();
+    await server.close();
+  });
+
+  browser = await chromium.launch();
+  const page = await browser.newPage({ viewport: { width: 1280, height: 900 }, deviceScaleFactor: 1 });
+  await mockApi(page, {
+    plugins: {
+      marketplaces: [
+        {
+          id: "available",
+          plugins: [
+            { summary: { id: "uninstalled", name: "Uninstalled Plugin", status: "available" } },
+          ],
+        },
+      ],
+    },
+  });
+  await mockWebSocket(page);
+  await page.goto(`${server.origin}/?token=${token}`, { waitUntil: "networkidle" });
+
+  await page.click("#pluginsButton");
+  await page.getByText("導入済み/有効なプラグインはありません").waitFor();
+
+  const panelText = await page.locator("#artifactList").innerText();
+  assert.match(panelText, /導入済み\/有効なプラグインはありません/);
+  assert.doesNotMatch(panelText, /Uninstalled Plugin/);
 });
