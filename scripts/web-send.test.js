@@ -79,6 +79,15 @@ async function mockApi(page, state = {}) {
       await route.fulfill({ json: file });
       return;
     }
+    if (url.pathname === "/api/skills") {
+      if (state.failSkillsOnce) {
+        state.failSkillsOnce = false;
+        await route.fulfill({ status: 503, json: { error: "skills temporarily unavailable" } });
+        return;
+      }
+      await route.fulfill({ json: { data: state.skills || [] } });
+      return;
+    }
     await route.fulfill({ json: {} });
   });
 }
@@ -271,4 +280,61 @@ test("artifact card click still lets other document click handlers close menus",
   await page.getByText("Rendered from a test artifact.").waitFor();
   assert.equal(await page.locator("#artifactPanel").getAttribute("aria-hidden"), "false");
   assert.equal(await page.locator("#modelMenu").evaluate((node) => node.classList.contains("hidden")), true);
+});
+
+test("slash opens installed skill menu and inserts the selected command", async (t) => {
+  const server = await startStaticServer();
+  let browser;
+  t.after(async () => {
+    if (browser) await browser.close();
+    await server.close();
+  });
+
+  browser = await chromium.launch();
+  const page = await browser.newPage({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 1 });
+  await mockApi(page, {
+    skills: [
+      { id: "browser-use:browser", name: "browser-use:browser", trigger: "/browser-use:browser", description: "Browser automation" },
+      { id: "github:github", name: "github:github", trigger: "/github:github", description: "GitHub triage" },
+    ],
+  });
+  await mockWebSocket(page);
+  await page.goto(`${server.origin}/?token=${token}`, { waitUntil: "networkidle" });
+  await page.waitForSelector("#send:not([disabled])");
+
+  await page.fill("#prompt", "please /bro");
+  await page.waitForSelector("#slashSkillMenu:not(.hidden)");
+  assert.match(await page.locator("#slashSkillMenu").innerText(), /browser-use:browser/);
+  assert.doesNotMatch(await page.locator("#slashSkillMenu").innerText(), /github:github/);
+
+  await page.press("#prompt", "Enter");
+  assert.equal(await page.inputValue("#prompt"), "please /browser-use:browser ");
+  assert.equal(await page.locator("#slashSkillMenu").evaluate((node) => node.classList.contains("hidden")), true);
+});
+
+test("slash skill menu retries after the first skills request fails", async (t) => {
+  const server = await startStaticServer();
+  let browser;
+  t.after(async () => {
+    if (browser) await browser.close();
+    await server.close();
+  });
+
+  browser = await chromium.launch();
+  const page = await browser.newPage({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 1 });
+  const apiState = {
+    failSkillsOnce: true,
+    skills: [{ id: "browser-use:browser", name: "browser-use:browser", trigger: "/browser-use:browser" }],
+  };
+  await mockApi(page, apiState);
+  await mockWebSocket(page);
+  await page.goto(`${server.origin}/?token=${token}`, { waitUntil: "networkidle" });
+  await page.waitForSelector("#send:not([disabled])");
+
+  await page.fill("#prompt", "/bro");
+  await page.getByText("スキルを読めませんでした: skills temporarily unavailable").waitFor();
+
+  await page.fill("#prompt", "retry /bro");
+  await page.waitForSelector("#slashSkillMenu:not(.hidden)");
+  assert.match(await page.locator("#slashSkillMenu").innerText(), /browser-use:browser/);
 });

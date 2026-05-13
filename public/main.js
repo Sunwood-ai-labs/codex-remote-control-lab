@@ -108,6 +108,11 @@ let accessMode = {
 };
 let pendingFiles = [];
 let lastReviewDigestSignature = "";
+let slashSkillMenu = null;
+let slashSkills = [];
+let slashSkillsLoaded = false;
+let slashActiveIndex = 0;
+let activeSlashMatch = null;
 
 function normalizeProviderName(provider) {
   const value = String(provider || "").trim().toLowerCase();
@@ -1232,6 +1237,131 @@ function appendToPrompt(text) {
   promptInput.focus();
 }
 
+function ensureSlashSkillMenu() {
+  if (slashSkillMenu) return slashSkillMenu;
+  slashSkillMenu = document.createElement("div");
+  slashSkillMenu.id = "slashSkillMenu";
+  slashSkillMenu.className = "slash-skill-menu hidden";
+  slashSkillMenu.setAttribute("role", "listbox");
+  slashSkillMenu.setAttribute("aria-label", "インストール済みスキル");
+  composer.appendChild(slashSkillMenu);
+  return slashSkillMenu;
+}
+
+function slashTriggerMatch() {
+  const caret = promptInput.selectionStart ?? promptInput.value.length;
+  if (promptInput.selectionEnd !== caret) return null;
+  const before = promptInput.value.slice(0, caret);
+  const match = before.match(/(^|[\s\n])\/([A-Za-z0-9:_-]*)$/);
+  if (!match) return null;
+  return { start: caret - match[2].length - 1, end: caret, query: match[2].toLowerCase() };
+}
+
+async function loadSlashSkills() {
+  if (slashSkillsLoaded) return slashSkills;
+  const result = await apiGet("/api/skills");
+  slashSkills = result.data || [];
+  slashSkillsLoaded = true;
+  return slashSkills;
+}
+
+function filterSlashSkills(query) {
+  const needle = String(query || "").toLowerCase();
+  return slashSkills.filter((skill) => {
+    const haystack = `${skill.name || ""} ${skill.id || ""} ${skill.pluginName || ""} ${skill.description || ""}`.toLowerCase();
+    return haystack.includes(needle);
+  });
+}
+
+function hideSlashSkillMenu() {
+  activeSlashMatch = null;
+  slashActiveIndex = 0;
+  slashSkillMenu?.classList.add("hidden");
+  promptInput.removeAttribute("aria-activedescendant");
+}
+
+function renderSlashSkillMenu(match) {
+  const menu = ensureSlashSkillMenu();
+  const options = filterSlashSkills(match.query).slice(0, 8);
+  slashActiveIndex = Math.min(slashActiveIndex, Math.max(options.length - 1, 0));
+  menu.replaceChildren();
+  if (!options.length) {
+    const empty = document.createElement("div");
+    empty.className = "slash-skill-empty";
+    empty.textContent = slashSkills.length ? "一致するスキルはありません" : "インストール済みスキルはありません";
+    menu.appendChild(empty);
+    menu.classList.remove("hidden");
+    return;
+  }
+  options.forEach((skill, index) => {
+    const row = document.createElement("button");
+    row.type = "button";
+    row.id = `slash-skill-${index}`;
+    row.className = "slash-skill-row";
+    row.setAttribute("role", "option");
+    row.setAttribute("aria-selected", String(index === slashActiveIndex));
+    row.innerHTML = `
+      <span class="slash-skill-command">${escapeHtml(skill.trigger || `/${skill.name || skill.id}`)}</span>
+      <span class="slash-skill-copy">
+        <strong>${escapeHtml(skill.name || skill.id)}</strong>
+        <small>${escapeHtml(skill.description || skill.pluginName || "installed skill")}</small>
+      </span>
+    `;
+    row.addEventListener("mousedown", (event) => event.preventDefault());
+    row.addEventListener("click", () => selectSlashSkill(skill));
+    menu.appendChild(row);
+  });
+  promptInput.setAttribute("aria-activedescendant", `slash-skill-${slashActiveIndex}`);
+  menu.classList.remove("hidden");
+}
+
+async function updateSlashSkillMenu() {
+  const match = slashTriggerMatch();
+  if (!match) {
+    hideSlashSkillMenu();
+    return;
+  }
+  activeSlashMatch = match;
+  ensureSlashSkillMenu().classList.remove("hidden");
+  if (!slashSkillsLoaded) ensureSlashSkillMenu().textContent = "読み込み中...";
+  try {
+    await loadSlashSkills();
+    if (!activeSlashMatch) return;
+    renderSlashSkillMenu(activeSlashMatch);
+  } catch (error) {
+    const menu = ensureSlashSkillMenu();
+    menu.replaceChildren();
+    const row = document.createElement("div");
+    row.className = "slash-skill-empty";
+    row.textContent = `スキルを読めませんでした: ${error.message}`;
+    menu.appendChild(row);
+    menu.classList.remove("hidden");
+  }
+}
+
+function slashMenuRows() {
+  return Array.from(ensureSlashSkillMenu().querySelectorAll(".slash-skill-row"));
+}
+
+function moveSlashSelection(delta) {
+  const rows = slashMenuRows();
+  if (!rows.length) return;
+  slashActiveIndex = (slashActiveIndex + delta + rows.length) % rows.length;
+  rows.forEach((row, index) => row.setAttribute("aria-selected", String(index === slashActiveIndex)));
+  promptInput.setAttribute("aria-activedescendant", `slash-skill-${slashActiveIndex}`);
+}
+
+function selectSlashSkill(skill) {
+  const match = activeSlashMatch || slashTriggerMatch();
+  if (!match) return;
+  const command = skill.trigger || `/${skill.name || skill.id}`;
+  promptInput.value = `${promptInput.value.slice(0, match.start)}${command} ${promptInput.value.slice(match.end)}`;
+  const caret = match.start + command.length + 1;
+  promptInput.setSelectionRange(caret, caret);
+  hideSlashSkillMenu();
+  promptInput.focus();
+}
+
 function openPromptModal() {
   if (!promptModal || !promptModalInput) return;
   promptModalInput.value = promptInput.value;
@@ -1851,6 +1981,29 @@ composer.addEventListener("submit", (event) => {
   promptInput.value = "";
   pendingFiles = [];
   renderAttachments();
+});
+
+promptInput.addEventListener("input", () => updateSlashSkillMenu());
+promptInput.addEventListener("click", () => updateSlashSkillMenu());
+promptInput.addEventListener("keydown", (event) => {
+  if (!slashSkillMenu || slashSkillMenu.classList.contains("hidden")) return;
+  if (event.key === "Escape") {
+    event.preventDefault();
+    hideSlashSkillMenu();
+    return;
+  }
+  if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+    event.preventDefault();
+    moveSlashSelection(event.key === "ArrowDown" ? 1 : -1);
+    return;
+  }
+  if (event.key === "Enter" || event.key === "Tab") {
+    const rows = slashMenuRows();
+    if (!rows.length) return;
+    event.preventDefault();
+    const skill = filterSlashSkills(activeSlashMatch?.query || "")[slashActiveIndex];
+    if (skill) selectSlashSkill(skill);
+  }
 });
 
 interruptButton?.addEventListener("click", () => {
