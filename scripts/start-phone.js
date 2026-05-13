@@ -753,6 +753,9 @@ class SharedBridge {
     this.startupFailed = false;
     this.history = [];
     this.turnQueue = [];
+    this.runState = { state: "connecting", label: "接続中", turnId: null, updatedAt: Date.now() };
+    this.streamingStarted = false;
+    this.interruptRequested = false;
     this.upstream = createUpstreamWebSocket();
     this.bindUpstream();
   }
@@ -780,6 +783,7 @@ class SharedBridge {
       shared: true,
       clients: this.clients.size,
       history: this.history,
+      run: this.runPayload(),
     };
   }
 
@@ -804,7 +808,10 @@ class SharedBridge {
   markUpstreamClosed(message = "Codex接続が切断されました。再接続してください。") {
     this.ready = false;
     this.activeTurnId = null;
+    this.streamingStarted = false;
+    this.interruptRequested = false;
     this.pending.clear();
+    this.setBridgeRunState("error", message);
     this.emit("error", { text: message });
     this.closeBrowserClients();
     bridges.delete(this.bridgeKey);
@@ -822,6 +829,24 @@ class SharedBridge {
 
   hasPendingTurnStart() {
     return Array.from(this.pending.values()).includes("turn/start");
+  }
+
+  hasPendingTurnInterrupt() {
+    return Array.from(this.pending.values()).includes("turn/interrupt");
+  }
+
+  setBridgeRunState(state, label, turnId = this.activeTurnId) {
+    this.runState = { state, label, turnId: turnId || null, updatedAt: Date.now() };
+    this.emit("runState", { run: this.runPayload() });
+  }
+
+  runPayload() {
+    return this.runState || {
+      state: this.ready ? "ready" : "connecting",
+      label: this.ready ? "待機中" : "接続中",
+      turnId: this.activeTurnId || null,
+      updatedAt: Date.now(),
+    };
   }
 
   promoteBridgeKey() {
@@ -876,6 +901,7 @@ class SharedBridge {
         this.promoteBridgeKey();
         this.ready = true;
         this.history = historyFromThread(msg.result.thread);
+        this.setBridgeRunState("ready", "待機中");
         this.emit("ready", this.readyPayload());
         if (this.requestedThreadId) this.emit("status", { text: `既存threadを再開しました: ${this.threadId}` });
         return;
@@ -884,18 +910,40 @@ class SharedBridge {
       if (pendingMethod === "turn/start") {
         this.pending.delete(msg.id);
         if (msg.error) {
+          this.interruptRequested = false;
           const problem = normalizeCodexProblem(msg.error);
           if (problem.turnId) this.activeTurnId = problem.turnId;
           this.emit(problem.severity, { text: problem.text, detail: problem.detail });
+          if (problem.severity === "error") this.setBridgeRunState("error", "開始に失敗", this.activeTurnId);
           if (problem.severity === "error") this.startNextQueuedTurn();
         } else {
           this.activeTurnId = msg.result.turn.id;
-          this.emit("turn", { status: "started", turnId: this.activeTurnId });
+          this.streamingStarted = false;
+          this.setBridgeRunState("running", "Codex 処理中", this.activeTurnId);
+          this.emit("turn", { status: "started", turnId: this.activeTurnId, run: this.runPayload() });
+          if (this.interruptRequested) {
+            this.interruptRequested = false;
+            this.sendTurnInterrupt(this.activeTurnId);
+          }
+        }
+        return;
+      }
+
+      if (pendingMethod === "turn/interrupt") {
+        this.pending.delete(msg.id);
+        if (msg.error) {
+          const problem = normalizeCodexProblem(msg.error);
+          this.emit("error", { text: `中断に失敗しました: ${problem.text}`, detail: problem.detail });
+          this.setBridgeRunState("error", "中断に失敗", this.activeTurnId);
+        } else {
+          this.setBridgeRunState("interrupting", "中断中", this.activeTurnId);
         }
         return;
       }
 
       if (msg.method === "item/agentMessage/delta") {
+        this.streamingStarted = true;
+        this.setBridgeRunState("streaming", "回答生成中", this.activeTurnId);
         this.emit("assistantDelta", { text: msg.params.delta });
         return;
       }
@@ -916,22 +964,31 @@ class SharedBridge {
       }
 
       if (msg.method === "turn/completed") {
+        const completedTurn = msg.params.turn || {};
+        const completedTurnId = msg.params.turnId || completedTurn.id || this.activeTurnId;
+        const wasInterrupted = completedTurn.status === "interrupted";
+        this.interruptRequested = false;
         this.activeTurnId = null;
-        this.emit("turn", { status: "completed", turnId: msg.params.turnId });
+        this.streamingStarted = false;
+        this.setBridgeRunState(wasInterrupted ? "interrupted" : "done", wasInterrupted ? "中断しました" : "完了しました", completedTurnId);
+        this.emit("turn", { status: "completed", turnId: completedTurnId, run: this.runPayload() });
         this.syncHistory("turn completed");
         this.startNextQueuedTurn();
         return;
       }
 
       if (msg.method && msg.method.endsWith("/requestApproval")) {
+        this.setBridgeRunState("approval", "承認待ち", this.activeTurnId);
         this.emit("approval", { request: msg });
         return;
       }
 
       if (msg.method === "error") {
+        this.interruptRequested = false;
         const problem = normalizeCodexProblem(msg.params);
         if (problem.turnId) this.activeTurnId = problem.turnId;
         this.emit(problem.severity, { text: problem.text, detail: problem.detail });
+        if (problem.severity === "error") this.setBridgeRunState("error", "エラー", this.activeTurnId);
         return;
       }
 
@@ -940,12 +997,55 @@ class SharedBridge {
 
     this.upstream.on("error", (error) => {
       if (!this.ready) this.startupFailed = true;
+      this.interruptRequested = false;
+      this.setBridgeRunState("error", "接続エラー", this.activeTurnId);
       this.emit("error", { text: error.message });
     });
     this.upstream.on("close", () => {
       if (!this.ready) this.startupFailed = true;
       this.markUpstreamClosed("Codex接続が閉じました。再接続ボタンを押してください。");
     });
+  }
+
+  sendTurnInterrupt(turnId = this.activeTurnId) {
+    if (!this.threadId || !turnId || this.hasPendingTurnInterrupt()) return false;
+    const id = this.request("turn/interrupt", {
+      threadId: this.threadId,
+      turnId,
+    });
+    if (!id) return false;
+    this.pending.set(id, "turn/interrupt");
+    this.setBridgeRunState("interrupting", "中断中", turnId);
+    this.emit("status", { text: "処理の中断を要求しました。" });
+    return true;
+  }
+
+  interrupt() {
+    const queuedCount = this.turnQueue.length;
+    this.turnQueue = [];
+    if (queuedCount) this.emit("status", { text: `待機中の送信を破棄しました（${queuedCount}件）。` });
+
+    if (this.activeTurnId) {
+      try {
+        this.interruptRequested = false;
+        if (!this.sendTurnInterrupt(this.activeTurnId)) {
+          this.emit("status", { text: "中断要求はすでに送信済みです。" });
+        }
+      } catch (error) {
+        this.setBridgeRunState("error", "中断に失敗", this.activeTurnId);
+        this.emit("error", { text: `中断要求の送信に失敗しました: ${error.message}` });
+      }
+      return;
+    }
+
+    if (this.hasPendingTurnStart()) {
+      this.interruptRequested = true;
+      this.setBridgeRunState("interrupting", "開始後に中断します");
+      this.emit("status", { text: "開始待ちの処理を中断予約しました。" });
+      return;
+    }
+
+    if (!queuedCount) this.emit("status", { text: "中断できる処理はありません。" });
   }
 
   prompt(text, attachments = [], options = {}) {
@@ -985,6 +1085,7 @@ class SharedBridge {
   }
 
   startPrompt(text, attachments = [], options = {}) {
+    this.interruptRequested = false;
     const input = [{ type: "text", text, text_elements: [] }];
     const savedImages = [];
     for (const attachment of attachments || []) {
@@ -1006,6 +1107,7 @@ class SharedBridge {
     });
     if (!id) return;
     this.pending.set(id, "turn/start");
+    this.setBridgeRunState("running", "Codex 処理中");
     const displayText = savedImages.length ? `${text}\n\n添付: ${savedImages.map((image) => image.name).join(", ")}` : text;
     this.appendHistory({ type: "user", text: displayText, attachments: savedImages });
     this.emit("user", { text: displayText, attachments: savedImages });
@@ -1059,6 +1161,7 @@ function bindBrowser(browser, phoneToken, threadId) {
       return;
     }
     if (msg.type === "prompt") bridge.prompt(msg.text, msg.attachments, msg.options);
+    if (msg.type === "interrupt") bridge.interrupt();
     if (msg.type === "approval") bridge.approval(msg.request, msg.decision);
   });
 }

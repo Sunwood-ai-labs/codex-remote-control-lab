@@ -154,6 +154,10 @@ function Composer() {
             <FaIcon icon={faChevronDown} className="button-chevron-icon" />
           </button>
           <button type="button" className="voice-button" id="voiceButton" title="音声入力" aria-label="音声入力"><Mic size={18} strokeWidth={1.9} /></button>
+          <button type="button" className="interrupt-button hidden" id="interruptRun" title="現在の処理を中断" aria-label="現在の処理を中断">
+            <span className="interrupt-icon" aria-hidden="true"></span>
+            <span className="interrupt-label">中断</span>
+          </button>
           <button id="send" type="submit" className="send-button" title="送信" aria-label="送信"><Send size={18} strokeWidth={2.2} /></button>
         </div>
       </div>
