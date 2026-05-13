@@ -162,6 +162,21 @@ function Composer() {
   );
 }
 
+function WorkspaceStrip() {
+  return (
+    <div id="workspaceIndicator" className="workspace-strip empty" aria-label="現在のワークスペース">
+      <div className="workspace-place">
+        <span id="workspaceRepo" className="workspace-repo">Repo</span>
+        <span id="workspaceLocation" className="workspace-location">.</span>
+      </div>
+      <div className="workspace-branch">
+        <span className="branch-label">Branch</span>
+        <span id="branchName" className="branch-name">unknown</span>
+      </div>
+    </div>
+  );
+}
+
 function Conversation() {
   return (
     <section className="conversation" aria-label="会話">
@@ -180,7 +195,10 @@ function Conversation() {
         <span className="run-state-dot" aria-hidden="true" />
         <span id="runStateLabel">接続準備中</span>
       </div>
-      <Composer />
+      <div className="composer-stack">
+        <Composer />
+        <WorkspaceStrip />
+      </div>
     </section>
   );
 }

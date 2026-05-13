@@ -1567,15 +1567,22 @@ body.hide-artifacts .artifact-panel {
   color: var(--text);
 }
 
-.composer {
+.composer-stack {
   position: sticky;
   z-index: 9;
   bottom: max(14px, env(safe-area-inset-bottom));
   align-self: center;
   flex: 0 0 auto;
   width: min(var(--message-width), calc(100% - 40px));
-  min-height: 70px;
+  max-width: 100%;
   margin: 0 0 max(14px, env(safe-area-inset-bottom));
+}
+
+.composer {
+  position: relative;
+  width: 100%;
+  min-height: 70px;
+  margin: 0 0 6px;
   border: 1px solid var(--composer-border);
   border-radius: 14px;
   background: var(--composer-bg);
@@ -1662,6 +1669,74 @@ textarea:focus-visible {
 
 textarea::placeholder {
   color: color-mix(in srgb, var(--muted) 78%, transparent);
+}
+
+.workspace-strip {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-width: 0;
+  min-height: 20px;
+  padding: 0 6px;
+  color: var(--nav-muted);
+  font-size: 12px;
+  font-weight: 650;
+  letter-spacing: 0;
+  line-height: 1.2;
+}
+
+.workspace-strip.empty {
+  opacity: 0.62;
+}
+
+.workspace-place,
+.workspace-branch {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.workspace-place {
+  gap: 6px;
+}
+
+.workspace-branch {
+  gap: 7px;
+  justify-content: flex-end;
+}
+
+.workspace-repo,
+.workspace-location,
+.branch-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workspace-repo {
+  flex: 0 1 auto;
+  min-width: 96px;
+  max-width: 32%;
+  color: var(--nav-text);
+}
+
+.workspace-location {
+  flex: 1 1 auto;
+}
+
+.branch-label {
+  flex: 0 0 auto;
+  color: var(--muted);
+  font-size: 11px;
+  text-transform: uppercase;
+}
+
+.branch-name {
+  max-width: min(220px, 30vw);
+  color: var(--nav-text);
 }
 
 .sr-only {
@@ -2408,7 +2483,7 @@ textarea::placeholder {
     padding-inline: clamp(20px, 6vw, 64px);
   }
 
-  .composer {
+  .composer-stack {
     width: min(760px, calc(100% - 32px));
   }
 
@@ -2572,11 +2647,33 @@ textarea::placeholder {
     font-size: 13px;
   }
 
-  .composer {
+  .composer-stack {
     width: calc(100vw - 18px);
-    min-height: 72px;
     margin-bottom: max(7px, env(safe-area-inset-bottom));
+  }
+
+  .composer {
+    min-height: 72px;
     border-radius: 12px;
+  }
+
+  .workspace-strip {
+    min-height: 22px;
+    padding: 0 3px;
+    font-size: 11px;
+  }
+
+  .workspace-branch {
+    gap: 5px;
+  }
+
+  .workspace-repo {
+    min-width: 86px;
+    max-width: 34%;
+  }
+
+  .branch-name {
+    max-width: 30vw;
   }
 
   .run-state {
@@ -2786,6 +2883,10 @@ textarea::placeholder {
     max-width: 52px;
     overflow: hidden;
     text-overflow: ellipsis;
+  }
+
+  .branch-label {
+    display: none;
   }
 
   .ghost-button,

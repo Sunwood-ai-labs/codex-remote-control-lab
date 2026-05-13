@@ -4,7 +4,7 @@ const http = require("http");
 const net = require("net");
 const os = require("os");
 const path = require("path");
-const { spawn } = require("child_process");
+const { execFileSync, spawn } = require("child_process");
 const WebSocket = require("ws");
 const { bridgeKeyForRequest, shouldDisposeIdleBridge, shouldPromoteBridgeKey } = require("./bridge-state");
 const { isHistorySyncEnabled, runHistorySync } = require("./history-sync");
@@ -12,6 +12,27 @@ const { bridgeUrls, notifyBridgeUrls } = require("./phone-notify");
 const { findLiveBridge, readThreadSnapshot } = require("./thread-read");
 
 const root = path.resolve(__dirname, "..");
+
+function displayPath(targetPath) {
+  const home = os.homedir();
+  const relative = path.relative(home, targetPath);
+  if (relative && !relative.startsWith("..") && !path.isAbsolute(relative)) return `~/${relative}`;
+  if (!relative) return "~";
+  return targetPath;
+}
+
+function gitOutput(args) {
+  try {
+    return execFileSync("git", args, {
+      cwd: workdir,
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+      timeout: 1500,
+    }).trim();
+  } catch {
+    return "";
+  }
+}
 
 function loadEnvFile(filePath) {
   if (!fs.existsSync(filePath)) return;
@@ -68,6 +89,19 @@ const imageExtensions = new Map([
   [".webp", "image/webp"],
   [".svg", "image/svg+xml"],
 ]);
+
+function currentWorkspaceMeta() {
+  const gitRoot = gitOutput(["rev-parse", "--show-toplevel"]);
+  const repoRoot = gitRoot || workdir;
+  const branch = gitOutput(["branch", "--show-current"]) || gitOutput(["rev-parse", "--short", "HEAD"]);
+  const location = gitRoot ? path.relative(gitRoot, workdir) || "." : displayPath(workdir);
+  return {
+    repoName: path.basename(repoRoot),
+    workspaceLocation: location,
+    gitBranch: branch || "unknown",
+  };
+}
+
 const staticMimeTypes = new Map([
   [".css", "text/css"],
   [".html", "text/html"],
@@ -777,6 +811,7 @@ class SharedBridge {
       threadId: this.threadId,
       model,
       workdir,
+      ...currentWorkspaceMeta(),
       shared: true,
       clients: this.clients.size,
       history: this.history,
@@ -1145,6 +1180,7 @@ async function main() {
       if (!requireToken(url, phoneToken, res)) return;
       sendJson(res, 200, {
         workdir,
+        ...currentWorkspaceMeta(),
         model,
         codexUrl,
         codexSocketPath: codexSocketPath || null,
