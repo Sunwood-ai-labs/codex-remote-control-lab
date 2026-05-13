@@ -13,6 +13,12 @@ const { findLiveBridge, readThreadSnapshot } = require("./thread-read");
 
 const root = path.resolve(__dirname, "..");
 
+function normalizeProvider(input) {
+  const value = String(input || "codex").trim().toLowerCase();
+  if (value === "codex" || value === "claude") return value;
+  throw new Error(`Unsupported PHONE_AGENT_PROVIDER: ${value}`);
+}
+
 function loadEnvFile(filePath) {
   if (!fs.existsSync(filePath)) return;
   const lines = fs.readFileSync(filePath, "utf8").split(/\r?\n/);
@@ -42,14 +48,21 @@ function loadEnvFile(filePath) {
 })();
 
 const codexBin = path.join(root, "node_modules", ".bin", "codex");
+const claudeBin = process.env.CLAUDE_BIN || "claude";
+const claudeProjectsRoot = path.join(os.homedir(), ".claude", "projects");
 const uiPort = Number(process.env.PHONE_UI_PORT || 45214);
 const codexPort = Number(process.env.CODEX_APP_SERVER_PORT || 45213);
 const codexSocketPath = process.env.CODEX_APP_SERVER_SOCK || "";
 const codexUrl = process.env.CODEX_APP_SERVER_URL || (codexSocketPath ? "ws://codex-app-server/rpc" : `ws://127.0.0.1:${codexPort}`);
-const shouldStartCodexServer = !process.env.CODEX_APP_SERVER_URL && !codexSocketPath;
-const workdir = path.resolve(process.env.CODEX_WORKDIR || root);
-const model = process.env.CODEX_MODEL || "gpt-5.4";
-const historySyncEnabled = isHistorySyncEnabled(process.env);
+const agentProvider = normalizeProvider(process.env.PHONE_AGENT_PROVIDER || process.env.AGENT_PROVIDER || process.env.PHONE_AGENT_PROVIDER_DEFAULT || "codex");
+const isCodexProvider = agentProvider === "codex";
+const isClaudeProvider = agentProvider === "claude";
+const shouldStartCodexServer = isCodexProvider && !process.env.CODEX_APP_SERVER_URL && !codexSocketPath;
+const workdirEnvKey = isClaudeProvider ? "CLAUDE_WORKDIR" : "CODEX_WORKDIR";
+const modelEnvKey = isClaudeProvider ? "CLAUDE_MODEL" : "CODEX_MODEL";
+const workdir = path.resolve(process.env.PHONE_WORKDIR || process.env[workdirEnvKey] || process.env.CODEX_WORKDIR || root);
+const model = process.env.PHONE_MODEL || process.env[modelEnvKey] || (isClaudeProvider ? "sonnet" : "gpt-5.4");
+const historySyncEnabled = isCodexProvider && isHistorySyncEnabled(process.env);
 const debugNoToken = /^(1|true|yes|on)$/i.test(process.env.PHONE_DEBUG_NO_TOKEN || "");
 const debugBind = (process.env.PHONE_DEBUG_BIND || "").trim().toLowerCase();
 const debugLan = debugNoToken && debugBind === "lan";
@@ -60,6 +73,9 @@ const tokenPath = path.join(root, ".phone-token");
 const uploadDir = path.join(root, ".uploads");
 const bridges = new Map();
 const historyLimit = 80;
+const modelOptions = isClaudeProvider
+  ? ["sonnet", "opus", "haiku", "claude-sonnet-4-6", "claude-opus-4-5"]
+  : ["gpt-5.5", "gpt-5.4", "gpt-5.3-codex", "gpt-5.3-codex-spark", "gpt-5.2"];
 const imageExtensions = new Map([
   [".png", "image/png"],
   [".jpg", "image/jpeg"],
@@ -740,6 +756,148 @@ function capHistory(history) {
   return history.slice(-historyLimit);
 }
 
+function claudeProjectDirFor(cwd = workdir) {
+  return path.join(claudeProjectsRoot, path.resolve(cwd).replace(/[^A-Za-z0-9]/g, "-"));
+}
+
+function textFromClaudeContent(content) {
+  if (typeof content === "string") return content;
+  if (!Array.isArray(content)) return "";
+  return content
+    .filter((part) => part?.type === "text" && typeof part.text === "string")
+    .map((part) => part.text)
+    .join("\n");
+}
+
+function claudeSessionFilePath(sessionId) {
+  const id = String(sessionId || "").trim();
+  if (!/^[A-Za-z0-9._:-]+$/.test(id)) return null;
+  const base = path.resolve(claudeProjectDirFor());
+  const target = path.resolve(base, `${id}.jsonl`);
+  if (!target.startsWith(`${base}${path.sep}`)) return null;
+  return target;
+}
+
+function readClaudeSessionFile(filePath) {
+  if (!filePath || !fs.existsSync(filePath) || !fs.statSync(filePath).isFile()) return null;
+  const sessionId = path.basename(filePath, ".jsonl");
+  const stat = fs.statSync(filePath);
+  const history = [];
+  let title = "";
+  let firstUserText = "";
+  let lastUserText = "";
+  let cwd = workdir;
+  let createdAt = Number.POSITIVE_INFINITY;
+  let updatedAt = stat.mtimeMs;
+
+  for (const line of fs.readFileSync(filePath, "utf8").split(/\r?\n/)) {
+    if (!line.trim()) continue;
+    let item;
+    try {
+      item = JSON.parse(line);
+    } catch {
+      continue;
+    }
+    if (item.cwd) cwd = item.cwd;
+    if (item.type === "ai-title" && item.aiTitle) title = String(item.aiTitle);
+    const timestamp = Date.parse(item.timestamp || "");
+    if (Number.isFinite(timestamp)) {
+      createdAt = Math.min(createdAt, timestamp);
+      updatedAt = Math.max(updatedAt, timestamp);
+    }
+    if (item.type !== "user" && item.type !== "assistant") continue;
+    const text = textFromClaudeContent(item.message?.content);
+    if (!text.trim()) continue;
+    const role = item.message?.role === "assistant" || item.type === "assistant" ? "assistant" : "user";
+    if (role === "user") {
+      if (!firstUserText) firstUserText = text;
+      lastUserText = text;
+    }
+    history.push({
+      type: role === "assistant" ? "assistant" : "user",
+      text,
+      outputGroup: item.uuid || item.requestId || sessionId,
+    });
+  }
+
+  const fallbackTitle = firstUserText || sessionId;
+  const firstTimestamp = Number.isFinite(createdAt) ? createdAt : stat.birthtimeMs;
+  return {
+    summary: {
+      id: sessionId,
+      name: title || fallbackTitle,
+      preview: lastUserText || fallbackTitle,
+      cwd,
+      provider: "claude",
+      updatedAt,
+      updated_at: updatedAt,
+      createdAt: firstTimestamp,
+      created_at: firstTimestamp,
+    },
+    history: capHistory(history),
+  };
+}
+
+function claudeHistoryForSession(sessionId) {
+  return readClaudeSessionFile(claudeSessionFilePath(sessionId))?.history || [];
+}
+
+function localThreadList() {
+  return Array.from(bridges.values()).map((bridge) => {
+    const userEntry = [...bridge.history].reverse().find((entry) => entry.type === "user");
+    const preview = userEntry?.text || bridge.threadId;
+    const updatedAt = Date.now();
+    return {
+      id: bridge.threadId,
+      name: preview.split("\n").find(Boolean) || bridge.threadId,
+      preview,
+      cwd: workdir,
+      provider: agentProvider,
+      updatedAt,
+      updated_at: updatedAt,
+    };
+  });
+}
+
+function claudeThreadListPayload() {
+  const byId = new Map();
+  const dir = claudeProjectDirFor();
+  if (fs.existsSync(dir)) {
+    for (const fileName of fs.readdirSync(dir)) {
+      if (!fileName.endsWith(".jsonl")) continue;
+      const session = readClaudeSessionFile(path.join(dir, fileName));
+      if (session) byId.set(session.summary.id, session.summary);
+    }
+  }
+  for (const thread of localThreadList()) {
+    const existing = byId.get(thread.id);
+    byId.set(thread.id, {
+      ...existing,
+      ...thread,
+      name: thread.name === thread.id && existing?.name ? existing.name : thread.name,
+      preview: thread.preview === thread.id && existing?.preview ? existing.preview : thread.preview,
+    });
+  }
+  return {
+    provider: "claude",
+    activeProvider: agentProvider,
+    data: Array.from(byId.values()).sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0)),
+  };
+}
+
+function claudePermissionMode(options = {}) {
+  if (options.permissionMode) return options.permissionMode;
+  if (options.sandboxMode === "danger-full-access" || options.approvalPolicy === "never") return "bypassPermissions";
+  if (options.sandboxMode === "read-only") return "plan";
+  return process.env.CLAUDE_PERMISSION_MODE || "acceptEdits";
+}
+
+function summarizeClaudeAttachmentPrompt(text, savedAttachments) {
+  if (!savedAttachments.length) return text;
+  const lines = savedAttachments.map((file) => `- ${file.name}: ${file.absolutePath}`);
+  return `${text || "添付ファイルを確認してください。"}\n\n添付ファイルはMac側に保存済みです。必要ならこのパスを読み取って処理してください:\n${lines.join("\n")}`;
+}
+
 class SharedBridge {
   constructor(requestedThreadId, bridgeKey) {
     this.requestedThreadId = requestedThreadId;
@@ -774,6 +932,7 @@ class SharedBridge {
 
   readyPayload() {
     return {
+      provider: agentProvider,
       threadId: this.threadId,
       model,
       workdir,
@@ -1036,6 +1195,208 @@ class SharedBridge {
   }
 }
 
+class ClaudeBridge {
+  constructor(requestedThreadId, bridgeKey) {
+    this.requestedThreadId = requestedThreadId;
+    this.bridgeKey = bridgeKey;
+    this.clients = new Set();
+    this.threadId = requestedThreadId || `claude:${crypto.randomUUID()}`;
+    this.claudeSessionId = requestedThreadId && !requestedThreadId.startsWith("claude:") ? requestedThreadId : null;
+    this.activeTurnId = null;
+    this.ready = true;
+    this.history = this.claudeSessionId ? claudeHistoryForSession(this.claudeSessionId) : [];
+    this.turnQueue = [];
+    this.activeProcess = null;
+    this.streamingStarted = false;
+  }
+
+  addClient(browser) {
+    this.clients.add(browser);
+    this.emitTo(browser, "status", { text: "共有Claudeブリッジに参加しました。" });
+    this.emitTo(browser, "ready", this.readyPayload());
+    browser.on("close", () => {
+      this.clients.delete(browser);
+      if (shouldDisposeIdleBridge({ clientCount: this.clients.size })) bridges.delete(this.bridgeKey);
+    });
+  }
+
+  readyPayload() {
+    return {
+      provider: agentProvider,
+      threadId: this.threadId,
+      model,
+      workdir,
+      shared: true,
+      clients: this.clients.size,
+      history: this.history,
+    };
+  }
+
+  emit(type, payload = {}) {
+    const body = JSON.stringify({ type, ...payload });
+    for (const client of this.clients) {
+      if (client.readyState === WebSocket.OPEN) client.send(body);
+    }
+  }
+
+  emitTo(client, type, payload = {}) {
+    if (client.readyState === WebSocket.OPEN) client.send(JSON.stringify({ type, ...payload }));
+  }
+
+  promoteBridgeKey() {
+    if (!this.claudeSessionId || this.bridgeKey === this.claudeSessionId) return;
+    const previousKey = this.bridgeKey;
+    if (bridges.has(this.claudeSessionId) && bridges.get(this.claudeSessionId) !== this) return;
+    if (bridges.get(previousKey) !== this) return;
+    this.threadId = this.claudeSessionId;
+    this.bridgeKey = this.claudeSessionId;
+    bridges.delete(previousKey);
+    bridges.set(this.bridgeKey, this);
+    this.emit("ready", this.readyPayload());
+  }
+
+  prompt(text, attachments = [], options = {}) {
+    if (this.activeTurnId || this.activeProcess) {
+      this.turnQueue.push({ text, attachments, options });
+      this.emit("status", { text: `キューに追加しました（${this.turnQueue.length}件待機）` });
+      return;
+    }
+    this.startPrompt(text, attachments, options);
+  }
+
+  startNextQueuedTurn() {
+    if (this.activeTurnId || this.activeProcess || !this.turnQueue.length) return;
+    const next = this.turnQueue.shift();
+    this.emit("status", { text: `キューから送信中（残り${this.turnQueue.length}件）` });
+    this.startPrompt(next.text, next.attachments, next.options);
+  }
+
+  startPrompt(text, attachments = [], options = {}) {
+    const savedAttachments = [];
+    const savedImages = [];
+    for (const attachment of attachments || []) {
+      const saved = saveDataUrlAttachment(attachment);
+      if (!saved) continue;
+      savedAttachments.push({ ...saved.preview, absolutePath: saved.input.path });
+      savedImages.push(saved.preview);
+    }
+
+    const promptText = summarizeClaudeAttachmentPrompt(text, savedAttachments);
+    const displayText = savedAttachments.length
+      ? `${text || "添付ファイルを確認してください。"}\n\n添付: ${savedAttachments.map((file) => file.name).join(", ")}`
+      : text;
+    const turnId = `claude-turn:${crypto.randomUUID()}`;
+    this.activeTurnId = turnId;
+    this.streamingStarted = false;
+    this.appendHistory({ type: "user", text: displayText, attachments: savedImages });
+    this.emit("user", { text: displayText, attachments: savedImages });
+    this.emit("turn", { status: "started", turnId });
+
+    const args = [
+      "-p",
+      promptText,
+      "--output-format",
+      "stream-json",
+      "--verbose",
+      "--include-partial-messages",
+      "--model",
+      options.model || model,
+      "--permission-mode",
+      claudePermissionMode(options),
+    ];
+    if (this.claudeSessionId) args.push("--resume", this.claudeSessionId);
+
+    const child = spawn(claudeBin, args, {
+      cwd: workdir,
+      env: process.env,
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    this.activeProcess = child;
+    let stdoutBuffer = "";
+    let stderrBuffer = "";
+    let assistantText = "";
+
+    const handleLine = (line) => {
+      if (!line.trim()) return;
+      let msg;
+      try {
+        msg = JSON.parse(line);
+      } catch {
+        this.emit("status", { text: line.slice(0, 500) });
+        return;
+      }
+      if (msg.session_id) {
+        this.claudeSessionId = msg.session_id;
+        this.promoteBridgeKey();
+      }
+      if (msg.type === "system" && msg.subtype === "init") {
+        this.emit("status", { text: `Claude session ready: ${msg.session_id || this.threadId}` });
+        return;
+      }
+      if (msg.type === "system" && msg.subtype === "api_retry") {
+        this.emit("status", { text: `Claude API retry ${msg.attempt}/${msg.max_retries}` });
+        return;
+      }
+      const delta = msg.type === "stream_event" && msg.event?.delta?.type === "text_delta" ? msg.event.delta.text : "";
+      if (delta) {
+        assistantText += delta;
+        this.emit("assistantDelta", { text: delta });
+        return;
+      }
+      if (msg.type === "result") {
+        if (!assistantText && msg.result) {
+          assistantText = String(msg.result);
+          this.emit("assistantDelta", { text: assistantText });
+        }
+      }
+    };
+
+    child.stdout.setEncoding("utf8");
+    child.stdout.on("data", (chunk) => {
+      stdoutBuffer += chunk;
+      const lines = stdoutBuffer.split(/\r?\n/);
+      stdoutBuffer = lines.pop() || "";
+      for (const line of lines) handleLine(line);
+    });
+    child.stderr.setEncoding("utf8");
+    child.stderr.on("data", (chunk) => {
+      stderrBuffer += chunk;
+      const lines = stderrBuffer.split(/\r?\n/);
+      stderrBuffer = lines.pop() || "";
+      for (const line of lines) {
+        if (line.trim()) this.emit("status", { text: line.slice(0, 500) });
+      }
+    });
+    child.on("error", (error) => {
+      this.emit("error", { text: `Claudeを起動できませんでした: ${error.message}` });
+    });
+    child.on("exit", (code, signal) => {
+      if (stdoutBuffer.trim()) handleLine(stdoutBuffer);
+      this.activeProcess = null;
+      this.activeTurnId = null;
+      this.streamingStarted = false;
+      if (code === 0) {
+        if (assistantText.trim()) this.appendHistory({ type: "assistant", text: assistantText, outputGroup: turnId });
+        this.emit("turn", { status: "completed", turnId });
+      } else {
+        const reason = signal ? `signal=${signal}` : `code=${code}`;
+        const message = `Claude process exited (${reason})${stderrBuffer.trim() ? `: ${stderrBuffer.trim().slice(-1000)}` : ""}`;
+        this.emit("error", { text: message });
+      }
+      this.startNextQueuedTurn();
+    });
+  }
+
+  appendHistory(entry) {
+    this.history.push(entry);
+    this.history = capHistory(this.history);
+  }
+
+  approval() {
+    this.emit("status", { text: "Claude headless providerでは実行中の承認応答は未対応です。" });
+  }
+}
+
 function getBridge(threadId, connectionId = crypto.randomUUID()) {
   if (!threadId) {
     for (const bridge of bridges.values()) {
@@ -1043,7 +1404,7 @@ function getBridge(threadId, connectionId = crypto.randomUUID()) {
     }
   }
   const key = bridgeKeyForRequest(threadId, connectionId);
-  if (!bridges.has(key)) bridges.set(key, new SharedBridge(threadId, key));
+  if (!bridges.has(key)) bridges.set(key, isClaudeProvider ? new ClaudeBridge(threadId, key) : new SharedBridge(threadId, key));
   return bridges.get(key);
 }
 
@@ -1068,7 +1429,7 @@ async function main() {
   const codex = shouldStartCodexServer ? startCodexServer() : null;
   if (shouldStartCodexServer) {
     await waitForReady();
-  } else {
+  } else if (isCodexProvider) {
     await appServerRequest("thread/loaded/list", { cursor: null, limit: 1 });
   }
 
@@ -1076,10 +1437,11 @@ async function main() {
     const url = new URL(req.url, `http://${req.headers.host}`);
     if (url.pathname === "/api/info") {
       sendJson(res, 200, {
+        provider: agentProvider,
         model,
         workdir,
-        codexUrl,
-        codexSocketPath: codexSocketPath || null,
+        codexUrl: isCodexProvider ? codexUrl : null,
+        codexSocketPath: isCodexProvider ? codexSocketPath || null : null,
         managedCodexServer: shouldStartCodexServer,
         tokenRequired,
         authMode,
@@ -1088,6 +1450,11 @@ async function main() {
     }
     if (url.pathname === "/api/threads") {
       if (!requireToken(url, phoneToken, res)) return;
+      const requestedProvider = normalizeProvider(url.searchParams.get("provider") || agentProvider);
+      if (requestedProvider === "claude") {
+        sendJson(res, 200, claudeThreadListPayload());
+        return;
+      }
       try {
         const result = await appServerRequest("thread/list", {
           limit: 30,
@@ -1096,14 +1463,24 @@ async function main() {
           archived: false,
           useStateDbOnly: false,
         });
-        sendJson(res, 200, result);
+        sendJson(res, 200, { ...result, provider: requestedProvider, activeProvider: agentProvider });
       } catch (error) {
+        if (requestedProvider !== agentProvider) {
+          sendJson(res, 200, { provider: requestedProvider, activeProvider: agentProvider, data: [], unavailable: error.message });
+          return;
+        }
         sendJson(res, 500, { error: error.message });
       }
       return;
     }
     if (url.pathname === "/api/models") {
       if (!requireToken(url, phoneToken, res)) return;
+      if (isClaudeProvider) {
+        sendJson(res, 200, {
+          data: modelOptions.map((item) => ({ id: item, model: item, displayName: item })),
+        });
+        return;
+      }
       try {
         const result = await appServerRequest("model/list", { limit: 80, includeHidden: false });
         sendJson(res, 200, result);
@@ -1114,6 +1491,10 @@ async function main() {
     }
     if (url.pathname === "/api/plugins") {
       if (!requireToken(url, phoneToken, res)) return;
+      if (isClaudeProvider) {
+        sendJson(res, 200, { data: [] });
+        return;
+      }
       try {
         const result = await appServerRequest("plugin/list", { cwds: [workdir] });
         sendJson(res, 200, result);
@@ -1124,6 +1505,14 @@ async function main() {
     }
     if (url.pathname === "/api/config") {
       if (!requireToken(url, phoneToken, res)) return;
+      if (isClaudeProvider) {
+        sendJson(res, 200, {
+          config: { config: { model, cwd: workdir, provider: agentProvider } },
+          auth: { authMethod: "claude-cli" },
+          errors: [],
+        });
+        return;
+      }
       try {
         const [config, auth] = await Promise.allSettled([
           appServerRequest("config/read", { includeLayers: false, cwd: workdir }),
@@ -1144,10 +1533,11 @@ async function main() {
     if (url.pathname === "/api/status") {
       if (!requireToken(url, phoneToken, res)) return;
       sendJson(res, 200, {
+        provider: agentProvider,
         workdir,
         model,
-        codexUrl,
-        codexSocketPath: codexSocketPath || null,
+        codexUrl: isCodexProvider ? codexUrl : null,
+        codexSocketPath: isCodexProvider ? codexSocketPath || null : null,
         managedCodexServer: shouldStartCodexServer,
         historySyncEnabled,
         tokenRequired,
@@ -1158,12 +1548,17 @@ async function main() {
           threadId: bridge.threadId,
           clients: bridge.clients.size,
           ready: bridge.ready,
+          provider: agentProvider,
         })),
       });
       return;
     }
     if (url.pathname === "/api/history-sync") {
       if (!requireToken(url, phoneToken, res)) return;
+      if (isClaudeProvider) {
+        sendJson(res, 200, { skipped: true, reason: "history sync is only available for the Codex provider" });
+        return;
+      }
       const threadId = url.searchParams.get("thread");
       if (!threadId) {
         sendJson(res, 400, { error: "thread is required" });
@@ -1185,8 +1580,19 @@ async function main() {
     if (url.pathname === "/api/thread") {
       if (!requireToken(url, phoneToken, res)) return;
       const threadId = url.searchParams.get("thread");
+      const requestedProvider = normalizeProvider(url.searchParams.get("provider") || agentProvider);
       if (!threadId) {
         sendJson(res, 400, { error: "thread is required" });
+        return;
+      }
+      if (requestedProvider === "claude") {
+        const bridge = Array.from(bridges.values()).find((item) => item.threadId === threadId || item.bridgeKey === threadId);
+        sendJson(res, 200, {
+          provider: requestedProvider,
+          activeProvider: agentProvider,
+          threadId,
+          history: bridge?.history?.length ? bridge.history : claudeHistoryForSession(threadId),
+        });
         return;
       }
       try {
@@ -1198,8 +1604,12 @@ async function main() {
           workdir,
           historyFromThread,
         });
-        sendJson(res, 200, snapshot);
+        sendJson(res, 200, { provider: requestedProvider, activeProvider: agentProvider, ...snapshot });
       } catch (error) {
+        if (requestedProvider !== agentProvider) {
+          sendJson(res, 200, { provider: requestedProvider, activeProvider: agentProvider, threadId, history: [], unavailable: error.message });
+          return;
+        }
         sendJson(res, 500, { error: error.message });
       }
       return;
@@ -1305,14 +1715,16 @@ async function main() {
     const addresses = tokenRequired || debugLan ? lanAddresses() : ["127.0.0.1"];
     const urls = bridgeUrls(addresses, uiPort, phoneToken);
     console.log("");
-    console.log("Codex shared browser bridge is ready.");
+    console.log(`${isClaudeProvider ? "Claude" : "Codex"} shared browser bridge is ready.`);
     for (const url of urls) console.log(`  ${url}`);
     console.log("");
     console.log(`Auth:    ${tokenRequired ? "token" : debugLan ? "debug-no-token (LAN exposed)" : "debug-no-token (localhost only)"}`);
     console.log(`Listen:  ${listenHost}:${uiPort}`);
+    console.log(`Provider:${agentProvider}`);
     console.log(`Workdir: ${workdir}`);
     console.log(`Model:   ${model}`);
-    console.log(`Codex:   ${shouldStartCodexServer ? codexUrl : codexSocketPath || codexUrl}`);
+    if (isCodexProvider) console.log(`Codex:   ${shouldStartCodexServer ? codexUrl : codexSocketPath || codexUrl}`);
+    else console.log(`Claude:  ${claudeBin}`);
     if (tokenRequired) console.log("Open the same URL from PC and phone to share one bridge thread.");
     else if (debugLan) console.log("Tokenless debug LAN mode is exposed to this network. Use only on a trusted LAN.");
     else console.log("Open the URL on this Mac only; tokenless debug mode is not exposed to the LAN.");

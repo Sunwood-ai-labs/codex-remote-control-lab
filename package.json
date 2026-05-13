@@ -10,6 +10,7 @@
     "server:ws": "codex app-server --listen ws://127.0.0.1:45213",
     "probe:ws": "node scripts/probe-ws.js",
     "phone": "node scripts/start-phone.js",
+    "phone:claude": "PHONE_AGENT_PROVIDER=claude node scripts/start-phone.js",
     "build:ui": "node scripts/build-ui.mjs",
     "screenshots:readme": "node scripts/capture-readme-screenshots.js",
     "test": "node --test scripts/*.test.js",
