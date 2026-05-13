@@ -8,6 +8,7 @@ import {
   FolderOpen,
   GitBranch,
   Globe2,
+  Maximize2,
   Mic,
   MoreHorizontal,
   PanelLeft,
@@ -143,6 +144,9 @@ function Composer() {
       <div className="composer-footer">
         <div className="composer-left">
           <button type="button" className="ghost-button icon-only" id="addButton" aria-label="画像を添付"><Plus size={18} strokeWidth={1.9} /></button>
+          <button type="button" className="ghost-button icon-only expand-button" id="expandPromptButton" title="入力欄を拡大" aria-label="入力欄を拡大">
+            <Maximize2 size={17} strokeWidth={1.9} aria-hidden="true" />
+          </button>
           <button type="button" className="access-button" id="accessButton">
             <span className="access-label">フルアクセス</span>
             <FaIcon icon={faChevronDown} className="button-chevron-icon" />
@@ -159,6 +163,24 @@ function Composer() {
       </div>
       <ModelMenu />
     </form>
+  );
+}
+
+function PromptModal() {
+  return (
+    <section className="prompt-modal hidden" id="promptModal" role="dialog" aria-modal="true" aria-labelledby="promptModalTitle">
+      <div className="prompt-modal-card">
+        <header className="prompt-modal-header">
+          <h2 id="promptModalTitle">入力を編集</h2>
+          <button type="button" className="prompt-modal-close" id="closePromptModalButton" aria-label="閉じる"><X size={17} strokeWidth={2} /></button>
+        </header>
+        <textarea id="promptModalInput" className="prompt-modal-input" placeholder="フォローアップの変更を求める" aria-label="拡大した入力欄" />
+        <footer className="prompt-modal-footer">
+          <button type="button" className="secondary" id="cancelPromptModalButton">キャンセル</button>
+          <button type="button" id="applyPromptModalButton">反映</button>
+        </footer>
+      </div>
+    </section>
   );
 }
 
@@ -181,6 +203,7 @@ function Conversation() {
         <span id="runStateLabel">接続準備中</span>
       </div>
       <Composer />
+      <PromptModal />
     </section>
   );
 }

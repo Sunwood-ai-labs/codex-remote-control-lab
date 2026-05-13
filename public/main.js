@@ -12,6 +12,7 @@ const addButton = document.querySelector("#addButton");
 const accessButton = document.querySelector("#accessButton");
 const modelButton = document.querySelector("#modelButton");
 const modelMenu = document.querySelector("#modelMenu");
+const expandPromptButton = document.querySelector("#expandPromptButton");
 const voiceButton = document.querySelector("#voiceButton");
 const fileInput = document.querySelector("#fileInput");
 const attachments = document.querySelector("#attachments");
@@ -36,6 +37,11 @@ const threadSearch = document.querySelector("#threadSearch");
 const threadTitle = document.querySelector("#threadTitle");
 const composer = document.querySelector("#composer");
 const promptInput = document.querySelector("#prompt");
+const promptModal = document.querySelector("#promptModal");
+const promptModalInput = document.querySelector("#promptModalInput");
+const closePromptModalButton = document.querySelector("#closePromptModalButton");
+const cancelPromptModalButton = document.querySelector("#cancelPromptModalButton");
+const applyPromptModalButton = document.querySelector("#applyPromptModalButton");
 const sendButton = document.querySelector("#send");
 const approval = document.querySelector("#approval");
 const approvalText = document.querySelector("#approvalText");
@@ -1090,6 +1096,22 @@ function appendToPrompt(text) {
   promptInput.focus();
 }
 
+function openPromptModal() {
+  if (!promptModal || !promptModalInput) return;
+  promptModalInput.value = promptInput.value;
+  promptModal.classList.remove("hidden");
+  document.body.classList.add("prompt-modal-open");
+  requestAnimationFrame(() => promptModalInput.focus());
+}
+
+function closePromptModal({ apply = false } = {}) {
+  if (!promptModal || !promptModalInput) return;
+  if (apply) promptInput.value = promptModalInput.value;
+  promptModal.classList.add("hidden");
+  document.body.classList.remove("prompt-modal-open");
+  promptInput.focus();
+}
+
 function renderArtifactIndex(items) {
   artifactItems = items;
   activeArtifactPath = "";
@@ -1708,6 +1730,16 @@ artifactPreview.addEventListener("click", (event) => {
   if (event.target.closest("[data-preview-close]")) hideArtifactPreview();
 });
 addButton.addEventListener("click", () => fileInput.click());
+expandPromptButton?.addEventListener("click", openPromptModal);
+closePromptModalButton?.addEventListener("click", () => closePromptModal({ apply: true }));
+cancelPromptModalButton?.addEventListener("click", () => closePromptModal({ apply: false }));
+applyPromptModalButton?.addEventListener("click", () => closePromptModal({ apply: true }));
+promptModal?.addEventListener("click", (event) => {
+  if (event.target === promptModal) closePromptModal({ apply: true });
+});
+promptModalInput?.addEventListener("keydown", (event) => {
+  if (event.key === "Escape") closePromptModal({ apply: true });
+});
 fileInput.addEventListener("change", async () => {
   const files = Array.from(fileInput.files || []).filter((file) => file.type.startsWith("image/"));
   try {
