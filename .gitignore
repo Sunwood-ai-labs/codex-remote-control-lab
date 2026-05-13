@@ -14,3 +14,4 @@ docs/.vitepress/cache/
 .phone-workspaces.json
 .uploads/
 tmp/
+slash-commands.local.json

@@ -42,6 +42,7 @@ const promptModalInput = document.querySelector("#promptModalInput");
 const closePromptModalButton = document.querySelector("#closePromptModalButton");
 const cancelPromptModalButton = document.querySelector("#cancelPromptModalButton");
 const applyPromptModalButton = document.querySelector("#applyPromptModalButton");
+const slashSuggestions = document.querySelector("#slashSuggestions");
 const sendButton = document.querySelector("#send");
 const interruptButton = document.querySelector("#interruptRun");
 const workspaceIndicator = document.querySelector("#workspaceIndicator");
@@ -122,6 +123,7 @@ let slashSkillsLoaded = false;
 let slashSkillsPromise = null;
 let slashActiveIndex = 0;
 let activeSlashMatch = null;
+let slashCommandsCache = [];
 
 function normalizeProviderName(provider) {
   const value = String(provider || "").trim().toLowerCase();
@@ -1496,6 +1498,89 @@ function closePromptModal({ apply = false } = {}) {
   promptInput.focus();
 }
 
+function parseSlashInput(text) {
+  const raw = String(text || "").trim();
+  if (!raw.startsWith("/")) return null;
+  const match = raw.match(/^\/([A-Za-z0-9_-]+)(?:\s+([\s\S]*))?$/);
+  if (!match) return null;
+  return { raw, command: match[1].toLowerCase(), args: (match[2] || "").trim() };
+}
+
+async function slashCommands() {
+  if (slashCommandsCache.length) return slashCommandsCache;
+  const result = await apiGet("/api/slash-commands");
+  slashCommandsCache = result.data || [];
+  return slashCommandsCache;
+}
+
+function findClientSlashCommand(parsed) {
+  const name = parsed?.command || "";
+  return slashCommandsCache.find((command) => command.name === name || (command.aliases || []).includes(name)) || null;
+}
+
+function runnableSlashText(command) {
+  const base = `/${command.name}`;
+  return command.requiresArgs ? `${base} ` : base;
+}
+
+function closeSlashSuggestions() {
+  slashSuggestions?.classList.add("hidden");
+  slashSuggestions?.replaceChildren();
+}
+
+async function updateSlashSuggestions() {
+  if (!slashSuggestions) return;
+  const value = promptInput.value.trim();
+  if (!value.startsWith("/") || value.includes("\n")) {
+    closeSlashSuggestions();
+    return;
+  }
+  try {
+    const query = value.slice(1).split(/\s+/)[0].toLowerCase();
+    const commands = await slashCommands();
+    const matches = commands
+      .filter((command) => command.name.startsWith(query) || (command.aliases || []).some((alias) => alias.startsWith(query)))
+      .slice(0, 8);
+    slashSuggestions.replaceChildren();
+    for (const command of matches) {
+      const row = document.createElement("button");
+      row.type = "button";
+      row.className = "slash-suggestion";
+      row.innerHTML = `<strong>${escapeHtml(command.usage || `/${command.name}`)}</strong><small>${escapeHtml(command.description || "")}</small>`;
+      row.addEventListener("click", () => {
+        const runnable = runnableSlashText(command);
+        promptInput.value = runnable;
+        promptInput.setSelectionRange(runnable.length, runnable.length);
+        promptInput.focus();
+        closeSlashSuggestions();
+      });
+      slashSuggestions.appendChild(row);
+    }
+    slashSuggestions.classList.toggle("hidden", !matches.length);
+  } catch {
+    closeSlashSuggestions();
+  }
+}
+
+function handleClientSlashCommand(parsed) {
+  if (parsed?.command === "status") {
+    showStatus();
+    return true;
+  }
+  if (parsed?.command === "new") {
+    selectThread("");
+    return true;
+  }
+  if (parsed?.command === "commands" || parsed?.command === "help") {
+    showSlashCommands();
+    return true;
+  }
+  const command = findClientSlashCommand(parsed);
+  if (!command || command.kind !== "client") return false;
+  showSlashCommands();
+  return true;
+}
+
 function renderArtifactIndex(items) {
   artifactItems = items;
   activeArtifactPath = "";
@@ -1843,6 +1928,27 @@ async function showReview() {
   }
 }
 
+async function showSlashCommands() {
+  clearPanel("スラッシュコマンド", "sources");
+  addPanelRow("読み込み中...");
+  try {
+    const commands = await slashCommands();
+    artifactList.replaceChildren();
+    for (const command of commands) {
+      addPanelRow(command.usage || `/${command.name}`, command.description || command.kind || "", () => {
+        const runnable = runnableSlashText(command);
+        promptInput.value = runnable;
+        promptInput.setSelectionRange(runnable.length, runnable.length);
+        promptInput.focus();
+        closeSlashSuggestions();
+      }, command.kind === "client" ? "UI" : command.kind === "shell" ? "$" : "/");
+    }
+    if (!commands.length) addPanelRow("スラッシュコマンドは見つかりませんでした");
+  } catch (error) {
+    showToolError("スラッシュコマンド", error);
+  }
+}
+
 function showSources() {
   clearPanel("情報源", "sources");
   addPanelRow("Web調査を入力へ追加", "外部確認が必要なターンで使う", () => {
@@ -1850,6 +1956,7 @@ function showSources() {
     addStatus("Web調査指示をチャット入力へ追加しました。");
   }, "WEB");
   addPanelRow("スキル", "利用可能な skill を入力へ追加", showSkills, "SK");
+  addPanelRow("スラッシュコマンド", "/compact、/diff、/review など", showSlashCommands, "/");
   addPanelRow("ローカルファイル", "Filesタブから @path を追加できます", showWorkspace, "FILE");
   addPanelRow("フォルダを選んで新しいチャット", "home 配下のフォルダだけ表示", () => showFolderBrowser(currentWorkdir || ""), "DIR");
   addPanelRow("差分レビュー", "Diffタブから変更ファイルを追加できます", showReview, "DIFF");
@@ -2217,6 +2324,29 @@ composer.addEventListener("submit", (event) => {
   event.preventDefault();
   const text = promptInput.value.trim();
   if ((!text && !pendingFiles.length) || !ws || ws.readyState !== WebSocket.OPEN) return;
+  const slash = parseSlashInput(text);
+  if (slash && !pendingFiles.length) {
+    if (handleClientSlashCommand(slash)) {
+      promptInput.value = "";
+      closeSlashSuggestions();
+      return;
+    }
+    ws.send(
+      JSON.stringify({
+        type: "slashCommand",
+        token,
+        text,
+        options: {
+          model: selectedModel || undefined,
+          approvalPolicy: accessMode.approvalPolicy,
+          sandboxMode: accessMode.sandboxMode,
+        },
+      }),
+    );
+    promptInput.value = "";
+    closeSlashSuggestions();
+    return;
+  }
   ws.send(
     JSON.stringify({
       type: "prompt",
@@ -2231,6 +2361,7 @@ composer.addEventListener("submit", (event) => {
     }),
   );
   promptInput.value = "";
+  closeSlashSuggestions();
   pendingFiles = [];
   renderAttachments();
 });
@@ -2302,6 +2433,8 @@ searchButton.addEventListener("click", () => {
   openSidebar();
 });
 threadSearch.addEventListener("input", renderThreadList);
+promptInput.addEventListener("input", updateSlashSuggestions);
+promptInput.addEventListener("blur", () => setTimeout(closeSlashSuggestions, 120));
 pluginsButton.addEventListener("click", showPlugins);
 automationsButton.addEventListener("click", showAutomations);
 settingsButton.addEventListener("click", showSettings);

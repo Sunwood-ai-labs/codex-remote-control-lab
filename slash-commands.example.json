@@ -1,0 +1,16 @@
+[
+  {
+    "name": "handoff",
+    "kind": "prompt",
+    "usage": "/handoff [topic]",
+    "description": "現在の session の引き継ぎメモを作成します。",
+    "template": "この session の引き継ぎメモを簡潔に作成してください。焦点: {{args}}"
+  },
+  {
+    "name": "shortstat",
+    "kind": "shell",
+    "usage": "/shortstat",
+    "description": "Git diff の短い統計を表示します。",
+    "command": "git diff --shortstat"
+  }
+]

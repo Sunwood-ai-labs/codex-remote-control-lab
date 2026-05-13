@@ -10,6 +10,7 @@ const { approvalRecordForClient, approvalResultForDecision, createApprovalStore,
 const { bridgeKeyForRequest, shouldDisposeIdleBridge, shouldPromoteBridgeKey } = require("./bridge-state");
 const { isHistorySyncEnabled, runHistorySync } = require("./history-sync");
 const { bridgeUrls, notifyBridgeUrls, notifyTaskEvent } = require("./phone-notify");
+const { findSlashCommand, parseSlashInput, readSlashCommands, slashCommandMetadata, slashShellCommand } = require("./slash-commands");
 const { findLiveBridge, liveThreadSummaries, readThreadSnapshot } = require("./thread-read");
 
 const root = path.resolve(__dirname, "..");
@@ -141,6 +142,14 @@ const staticMimeTypes = new Map([
   [".svg", "image/svg+xml"],
   [".webmanifest", "application/manifest+json"],
 ]);
+
+function currentSlashCommands() {
+  return readSlashCommands(root, process.env);
+}
+
+function currentSlashCommandMetadata() {
+  return currentSlashCommands().map(slashCommandMetadata);
+}
 
 function getToken() {
   if (process.env.PHONE_TOKEN) return process.env.PHONE_TOKEN;
@@ -1721,6 +1730,23 @@ class SharedBridge {
         return;
       }
 
+      if (pendingMethod === "thread/compact/start" || pendingMethod === "thread/shellCommand") {
+        this.pending.delete(msg.id);
+        if (msg.error) {
+          const failedTurnId = this.activeTurnId;
+          this.activeTurnId = null;
+          this.setBridgeRunState("error", "Slash command に失敗", failedTurnId);
+          this.emit("error", { text: msg.error.message || JSON.stringify(msg.error) });
+          this.startNextQueuedTurn();
+        } else {
+          this.setBridgeRunState("running", pendingMethod === "thread/compact/start" ? "Compaction 実行中" : "Shell command 実行中", this.activeTurnId);
+          this.emit("status", {
+            text: pendingMethod === "thread/compact/start" ? "会話の compaction を受け付けました。" : "Shell command を受け付けました。",
+          });
+        }
+        return;
+      }
+
       if (msg.method === "item/agentMessage/delta") {
         this.flushPendingInterrupt();
         this.streamingStarted = true;
@@ -1943,6 +1969,79 @@ class SharedBridge {
     const displayText = savedImages.length ? `${text}\n\n添付: ${savedImages.map((image) => image.name).join(", ")}` : text;
     this.appendHistory({ type: "user", text: displayText, attachments: savedImages });
     this.emit("user", { text: displayText, attachments: savedImages });
+  }
+
+  slashCommand(raw, options = {}) {
+    const parsed = parseSlashInput(raw);
+    if (!parsed) {
+      this.emit("error", { text: "Slash command の形式を解釈できませんでした。" });
+      return;
+    }
+    const command = findSlashCommand(currentSlashCommands(), parsed.command);
+    if (!command) {
+      this.emit("status", { text: `/${parsed.command} はこの remote UI では未対応です。/commands で対応一覧を確認できます。` });
+      return;
+    }
+    if (!this.threadId) {
+      this.emit("error", { text: "Thread is not ready yet" });
+      return;
+    }
+    if (command.name === "compact") {
+      if (this.activeTurnId || this.hasPendingTurnStart()) {
+        this.emit("status", { text: "/compact は Codex の処理完了後に実行できます。" });
+        return;
+      }
+      this.activeTurnId = crypto.randomUUID();
+      this.setBridgeRunState("running", "Compaction 実行中", this.activeTurnId);
+      const id = this.request("thread/compact/start", { threadId: this.threadId });
+      if (!id) {
+        this.activeTurnId = null;
+        this.setBridgeRunState("error", "Compaction を開始できませんでした");
+        return;
+      }
+      this.pending.set(id, "thread/compact/start");
+      this.emit("status", { text: "会話の compaction を開始しました。" });
+      return;
+    }
+    if (command.kind === "shell") {
+      if (this.activeTurnId || this.hasPendingTurnStart()) {
+        this.emit("status", { text: `/${command.name} は Codex の処理完了後に実行できます。` });
+        return;
+      }
+      const shellCommand = slashShellCommand(command, parsed);
+      if (!shellCommand.trim()) {
+        this.emit("status", { text: `/${command.name} の shell command が未設定です。` });
+        return;
+      }
+      this.activeTurnId = crypto.randomUUID();
+      this.setBridgeRunState("running", "Shell command 実行中", this.activeTurnId);
+      const id = this.request("thread/shellCommand", { threadId: this.threadId, command: shellCommand });
+      if (!id) {
+        this.activeTurnId = null;
+        this.setBridgeRunState("error", "Shell command を開始できませんでした");
+        return;
+      }
+      this.pending.set(id, "thread/shellCommand");
+      this.emit("status", { text: `/${command.name} を実行しています。` });
+      return;
+    }
+    if (command.kind === "prompt") {
+      const text =
+        command.name === "goal"
+          ? parsed.args
+            ? `このセッションの目標を次の内容として扱ってください。必要なら利用可能な goal 機能で目標を設定し、以後の作業はこの達成条件に沿って進めてください。\n\n目標: ${parsed.args}`
+            : "現在のセッション目標を確認してください。目標が未設定または曖昧なら、現在の文脈から未確定事項を分けて短く報告してください。"
+          : command.name === "review"
+            ? "現在の working tree をコードレビューしてください。バグ、回帰、セキュリティ、テスト不足を優先して、高信頼度の指摘だけをファイル/行の根拠つきで報告してください。"
+            : command.renderPrompt(parsed.args, parsed);
+      if (!text.trim()) {
+        this.emit("status", { text: `/${command.name} の prompt template が未設定です。` });
+        return;
+      }
+      this.prompt(text, [], options);
+      return;
+    }
+    this.emit("status", { text: `/${command.name} は browser 側で処理する command です。` });
   }
 
   appendHistory(entry) {
@@ -2176,6 +2275,10 @@ function bindBrowser(browser, phoneToken, threadId, options = {}) {
       return;
     }
     if (msg.type === "prompt") bridge.prompt(msg.text, msg.attachments, msg.options);
+    if (msg.type === "slashCommand") {
+      if (typeof bridge.slashCommand === "function") bridge.slashCommand(msg.text, msg.options);
+      else bridge.emitTo(browser, "status", { text: `${providerLabel()} providerでは slash command は未対応です。` });
+    }
     if (msg.type === "interrupt") {
       if (typeof bridge.interrupt === "function") bridge.interrupt();
       else bridge.emitTo(browser, "status", { text: `${providerLabel()} providerでは実行中の中断は未対応です。` });
@@ -2439,6 +2542,11 @@ async function main() {
         return;
       }
       sendJson(res, 200, listing);
+      return;
+    }
+    if (url.pathname === "/api/slash-commands") {
+      if (!requireToken(url, phoneToken, res)) return;
+      sendJson(res, 200, { data: currentSlashCommandMetadata() });
       return;
     }
     if (url.pathname === "/api/artifacts") {
