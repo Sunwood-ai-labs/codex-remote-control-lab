@@ -1299,9 +1299,9 @@ function slashTriggerMatch() {
   const caret = promptInput.selectionStart ?? promptInput.value.length;
   if (promptInput.selectionEnd !== caret) return null;
   const before = promptInput.value.slice(0, caret);
-  const match = before.match(/(^|[\s\n])\/([A-Za-z0-9:_-]*)$/);
+  const match = before.match(/(^|\s)([/／])([\p{L}\p{N}:_-]*)$/u);
   if (!match) return null;
-  return { start: caret - match[2].length - 1, end: caret, query: match[2].toLowerCase() };
+  return { start: caret - match[3].length - match[2].length, end: caret, query: match[3].toLowerCase() };
 }
 
 async function loadSlashSkills() {
@@ -1315,7 +1315,7 @@ async function loadSlashSkills() {
 function filterSlashSkills(query) {
   const needle = String(query || "").toLowerCase();
   return slashSkills.filter((skill) => {
-    const haystack = `${skill.name || ""} ${skill.id || ""} ${skill.pluginName || ""} ${skill.description || ""}`.toLowerCase();
+    const haystack = `${skill.trigger || ""} ${skill.name || ""} ${skill.id || ""} ${skill.pluginName || ""} ${skill.description || ""}`.toLowerCase();
     return haystack.includes(needle);
   });
 }
@@ -2076,6 +2076,7 @@ composer.addEventListener("submit", (event) => {
 
 promptInput.addEventListener("input", () => updateSlashSkillMenu());
 promptInput.addEventListener("click", () => updateSlashSkillMenu());
+promptInput.addEventListener("compositionend", () => updateSlashSkillMenu());
 promptInput.addEventListener("keydown", (event) => {
   if (!slashSkillMenu || slashSkillMenu.classList.contains("hidden")) return;
   if (event.key === "Escape") {

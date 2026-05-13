@@ -418,6 +418,42 @@ test("slash skill menu retries after the first skills request fails", async (t) 
   assert.match(await page.locator("#slashSkillMenu").innerText(), /browser-use:browser/);
 });
 
+test("slash skill menu opens from full-width mobile slash and normalizes the command", async (t) => {
+  const server = await startStaticServer();
+  let browser;
+  t.after(async () => {
+    if (browser) await browser.close();
+    await server.close();
+  });
+
+  browser = await chromium.launch();
+  const context = await browser.newContext({
+    viewport: { width: 390, height: 844 },
+    deviceScaleFactor: 1,
+    isMobile: true,
+    hasTouch: true,
+  });
+  const page = await context.newPage();
+  await mockApi(page, {
+    skills: [
+      { id: "browser-use:browser", name: "browser-use:browser", trigger: "/browser-use:browser", description: "Browser automation" },
+      { id: "github:github", name: "github:github", trigger: "/github:github", description: "GitHub triage" },
+    ],
+  });
+  await mockWebSocket(page);
+  await page.goto(`${server.origin}/?token=${token}`, { waitUntil: "networkidle" });
+  await page.waitForSelector("#send:not([disabled])");
+
+  await page.fill("#prompt", "please ／bro");
+  await page.waitForSelector("#slashSkillMenu:not(.hidden)");
+  assert.match(await page.locator("#slashSkillMenu").innerText(), /browser-use:browser/);
+  assert.doesNotMatch(await page.locator("#slashSkillMenu").innerText(), /github:github/);
+
+  await page.press("#prompt", "Enter");
+  assert.equal(await page.inputValue("#prompt"), "please /browser-use:browser ");
+  assert.equal(await page.locator("#slashSkillMenu").evaluate((node) => node.classList.contains("hidden")), true);
+});
+
 test("plugin panel defaults to installed and enabled entries only", async (t) => {
   const server = await startStaticServer();
   let browser;
