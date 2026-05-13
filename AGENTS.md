@@ -11,5 +11,6 @@
 - Treat `CONTRIBUTING.md` and `docs/guide/contributing.md` as the public contribution SOT. Update them when the repository workflow, upstream PR policy, or public-safe checklist changes.
 - For PRs back to the original upstream repository, create a small public-safe branch from the upstream base, port only the reusable change, verify it, then open the PR from this fork. Keep private workflow glue, local tokens, generated session data, and user-specific setup out of upstream PRs.
 - After each meaningful change, run a focused verification command before committing and pushing the relevant Git Flow branch.
+- For UI/browser behavior, verify with both script-based Playwright checks and `browser-use:browser` in the Codex in-app browser. Keep evidence from both surfaces when filing or updating issues.
 - Prefer small commits that describe the working increment, such as adding the phone bridge, updating docs, or fixing protocol handling.
 - Keep the Codex app-server bound to localhost in examples; expose only the token-protected bridge on the LAN.
