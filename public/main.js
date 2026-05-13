@@ -44,6 +44,10 @@ const cancelPromptModalButton = document.querySelector("#cancelPromptModalButton
 const applyPromptModalButton = document.querySelector("#applyPromptModalButton");
 const sendButton = document.querySelector("#send");
 const interruptButton = document.querySelector("#interruptRun");
+const workspaceIndicator = document.querySelector("#workspaceIndicator");
+const workspaceRepo = document.querySelector("#workspaceRepo");
+const workspaceLocation = document.querySelector("#workspaceLocation");
+const branchName = document.querySelector("#branchName");
 const approval = document.querySelector("#approval");
 const approvalText = document.querySelector("#approvalText");
 const approveButton = document.querySelector("#approve");
@@ -90,6 +94,11 @@ let activeArtifactPath = "";
 let activePanel = "artifacts";
 let currentRunState = "connecting";
 let interruptRequestPending = false;
+let currentWorkspace = {
+  repoName: "",
+  workspaceLocation: "",
+  gitBranch: "",
+};
 let accessMode = {
   label: "フルアクセス",
   approvalPolicy: "never",
@@ -148,6 +157,36 @@ function setRunState(state, label) {
     runStateLabel.textContent = nextLabel;
   }
   updateInterruptButton();
+}
+
+function compactWorkspaceLocation(location) {
+  const value = String(location || ".").replace(/\\/g, "/");
+  if (value === "." || value === "~") return value;
+  const prefix = value.startsWith("~/") ? "~/" : value.startsWith("/") ? "/" : "";
+  const body = prefix ? value.slice(prefix.length) : value;
+  const parts = body.split("/").filter(Boolean);
+  if (parts.length <= 2) return value;
+  return `${prefix}.../${parts.slice(-2).join("/")}`;
+}
+
+function setWorkspaceMeta(payload = {}) {
+  const repoName = String(payload.repoName || currentWorkspace.repoName || "").trim();
+  const location = String(payload.workspaceLocation || currentWorkspace.workspaceLocation || "").trim();
+  const branch = String(payload.gitBranch || payload.branch || currentWorkspace.gitBranch || "").trim();
+  currentWorkspace = { repoName, workspaceLocation: location, gitBranch: branch };
+  if (!workspaceIndicator || !workspaceRepo || !workspaceLocation || !branchName) return;
+  const hasMeta = Boolean(repoName || location || branch);
+  workspaceIndicator.classList.toggle("empty", !hasMeta);
+  workspaceRepo.textContent = repoName || "リポジトリ";
+  workspaceRepo.title = repoName || "";
+  workspaceLocation.textContent = compactWorkspaceLocation(location || ".");
+  workspaceLocation.title = location || ".";
+  branchName.textContent = branch || "不明";
+  branchName.title = branch || "";
+  workspaceIndicator.setAttribute(
+    "aria-label",
+    `現在のワークスペース: ${repoName || "不明"} ${location || "."} ${branch || "不明"}`,
+  );
 }
 
 function parseMaybeJson(value) {
@@ -1418,9 +1457,13 @@ async function showStatus() {
   clearPanel("バックグラウンド", "status");
   try {
     const result = await apiGet("/api/status");
+    setWorkspaceMeta(result);
     addPanelRow("UI port", String(result.uiPort));
     addPanelRow("Codex app-server", result.codexUrl);
     addPanelRow("履歴同期", result.historySyncEnabled ? "有効" : "無効");
+    addPanelRow("リポジトリ", result.repoName || "");
+    addPanelRow("現在地", result.workspaceLocation || result.workdir || "");
+    addPanelRow("Git ブランチ", result.gitBranch || "不明");
     addPanelRow("作業ディレクトリ", result.workdir);
     for (const bridge of result.bridges || []) {
       addPanelRow(bridge.threadId || "thread準備中", `${bridge.clients}端末 / ${bridge.ready ? "ready" : "starting"}`);
@@ -1627,6 +1670,7 @@ function connect() {
     }
     if (msg.type === "ready") {
       setReady(true);
+      setWorkspaceMeta(msg);
       syncReadyThread(msg.threadId);
       renderHistoryIfChanged(msg.history || []);
       meta.textContent = `${msg.model}  •  ${msg.clients}端末  •  ${msg.workdir}`;

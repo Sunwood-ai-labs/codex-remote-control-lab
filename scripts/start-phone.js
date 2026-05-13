@@ -4,7 +4,7 @@ const http = require("http");
 const net = require("net");
 const os = require("os");
 const path = require("path");
-const { spawn } = require("child_process");
+const { execFile, spawn } = require("child_process");
 const WebSocket = require("ws");
 const { bridgeKeyForRequest, shouldDisposeIdleBridge, shouldPromoteBridgeKey } = require("./bridge-state");
 const { isHistorySyncEnabled, runHistorySync } = require("./history-sync");
@@ -12,6 +12,22 @@ const { bridgeUrls, notifyBridgeUrls } = require("./phone-notify");
 const { findLiveBridge, readThreadSnapshot } = require("./thread-read");
 
 const root = path.resolve(__dirname, "..");
+
+function displayPath(targetPath) {
+  const home = os.homedir();
+  const relative = path.relative(home, targetPath);
+  if (relative && !relative.startsWith("..") && !path.isAbsolute(relative)) return `~/${relative}`;
+  if (!relative) return "~";
+  return targetPath;
+}
+
+function gitOutput(args) {
+  return new Promise((resolve) => {
+    execFile("git", args, { cwd: workdir, encoding: "utf8", timeout: 1500 }, (error, stdout) => {
+      resolve(error ? "" : stdout.trim());
+    });
+  });
+}
 
 function loadEnvFile(filePath) {
   if (!fs.existsSync(filePath)) return;
@@ -68,6 +84,30 @@ const imageExtensions = new Map([
   [".webp", "image/webp"],
   [".svg", "image/svg+xml"],
 ]);
+
+let workspaceMetaCache = {
+  repoName: path.basename(workdir),
+  workspaceLocation: displayPath(workdir),
+  gitBranch: "不明",
+};
+
+function currentWorkspaceMeta() {
+  return workspaceMetaCache;
+}
+
+async function refreshWorkspaceMeta() {
+  const gitRoot = await gitOutput(["rev-parse", "--show-toplevel"]);
+  const repoRoot = gitRoot || workdir;
+  const branch = (await gitOutput(["branch", "--show-current"])) || (await gitOutput(["rev-parse", "--short", "HEAD"]));
+  const location = gitRoot ? path.relative(gitRoot, workdir) || "." : displayPath(workdir);
+  workspaceMetaCache = {
+    repoName: path.basename(repoRoot),
+    workspaceLocation: location,
+    gitBranch: branch || "不明",
+  };
+  return workspaceMetaCache;
+}
+
 const staticMimeTypes = new Map([
   [".css", "text/css"],
   [".html", "text/html"],
@@ -780,6 +820,7 @@ class SharedBridge {
       threadId: this.threadId,
       model,
       workdir,
+      ...currentWorkspaceMeta(),
       shared: true,
       clients: this.clients.size,
       history: this.history,
@@ -1251,8 +1292,10 @@ async function main() {
     }
     if (url.pathname === "/api/status") {
       if (!requireToken(url, phoneToken, res)) return;
+      const workspaceMeta = await refreshWorkspaceMeta();
       sendJson(res, 200, {
         workdir,
+        ...workspaceMeta,
         model,
         codexUrl,
         codexSocketPath: codexSocketPath || null,

@@ -188,6 +188,21 @@ function PromptModal() {
   );
 }
 
+function WorkspaceStrip() {
+  return (
+    <div id="workspaceIndicator" className="workspace-strip empty" aria-label="現在のワークスペース">
+      <div className="workspace-place">
+        <span id="workspaceRepo" className="workspace-repo">リポジトリ</span>
+        <span id="workspaceLocation" className="workspace-location">.</span>
+      </div>
+      <div className="workspace-branch">
+        <span className="branch-label">ブランチ</span>
+        <span id="branchName" className="branch-name">不明</span>
+      </div>
+    </div>
+  );
+}
+
 function Conversation() {
   return (
     <section className="conversation" aria-label="会話">
@@ -206,7 +221,10 @@ function Conversation() {
         <span className="run-state-dot" aria-hidden="true" />
         <span id="runStateLabel">接続準備中</span>
       </div>
-      <Composer />
+      <div className="composer-stack">
+        <Composer />
+        <WorkspaceStrip />
+      </div>
       <PromptModal />
     </section>
   );
