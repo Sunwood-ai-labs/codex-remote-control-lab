@@ -1737,8 +1737,10 @@ applyPromptModalButton?.addEventListener("click", () => closePromptModal({ apply
 promptModal?.addEventListener("click", (event) => {
   if (event.target === promptModal) closePromptModal({ apply: true });
 });
-promptModalInput?.addEventListener("keydown", (event) => {
-  if (event.key === "Escape") closePromptModal({ apply: true });
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && promptModal && !promptModal.classList.contains("hidden")) {
+    closePromptModal({ apply: true });
+  }
 });
 fileInput.addEventListener("change", async () => {
   const files = Array.from(fileInput.files || []).filter((file) => file.type.startsWith("image/"));
