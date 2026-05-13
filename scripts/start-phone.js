@@ -9,6 +9,7 @@ const WebSocket = require("ws");
 const { bridgeKeyForRequest, shouldDisposeIdleBridge, shouldPromoteBridgeKey } = require("./bridge-state");
 const { isHistorySyncEnabled, runHistorySync } = require("./history-sync");
 const { bridgeUrls, notifyBridgeUrls } = require("./phone-notify");
+const { findSlashCommand, parseSlashInput, readSlashCommands, renderSlashTemplate } = require("./slash-commands");
 const { findLiveBridge, readThreadSnapshot } = require("./thread-read");
 
 const root = path.resolve(__dirname, "..");
@@ -77,6 +78,10 @@ const staticMimeTypes = new Map([
   [".svg", "image/svg+xml"],
   [".webmanifest", "application/manifest+json"],
 ]);
+
+function currentSlashCommands() {
+  return readSlashCommands(root, process.env);
+}
 
 function getToken() {
   if (process.env.PHONE_TOKEN) return process.env.PHONE_TOKEN;
@@ -823,6 +828,18 @@ class SharedBridge {
         return;
       }
 
+      if (pendingMethod === "thread/compact/start" || pendingMethod === "thread/shellCommand") {
+        this.pending.delete(msg.id);
+        if (msg.error) {
+          this.emit("error", { text: msg.error.message || JSON.stringify(msg.error) });
+        } else {
+          this.emit("status", {
+            text: pendingMethod === "thread/compact/start" ? "会話の compaction を受け付けました。" : "Shell command を受け付けました。",
+          });
+        }
+        return;
+      }
+
       if (msg.method === "item/agentMessage/delta") {
         this.emit("assistantDelta", { text: msg.params.delta });
         return;
@@ -936,6 +953,66 @@ class SharedBridge {
     this.emit("user", { text: displayText, attachments: savedImages });
   }
 
+  slashCommand(raw, options = {}) {
+    const parsed = parseSlashInput(raw);
+    if (!parsed) {
+      this.emit("error", { text: "Slash command の形式を解釈できませんでした。" });
+      return;
+    }
+    const command = findSlashCommand(currentSlashCommands(), parsed.command);
+    if (!command) {
+      this.emit("status", { text: `/${parsed.command} はこの remote UI では未対応です。/commands で対応一覧を確認できます。` });
+      return;
+    }
+    if (!this.threadId) {
+      this.emit("error", { text: "Thread is not ready yet" });
+      return;
+    }
+    if (command.name === "compact") {
+      if (this.activeTurnId || this.hasPendingTurnStart()) {
+        this.emit("status", { text: "/compact は Codex の処理完了後に実行できます。" });
+        return;
+      }
+      const id = this.request("thread/compact/start", { threadId: this.threadId });
+      this.pending.set(id, "thread/compact/start");
+      this.emit("status", { text: "会話の compaction を開始しました。" });
+      return;
+    }
+    if (command.kind === "shell") {
+      const shellCommand =
+        command.name === "diff"
+          ? parsed.args === "full"
+            ? "git diff -- ."
+            : "git status --short && git diff --stat"
+          : renderSlashTemplate(command.command, parsed.args, parsed);
+      if (!shellCommand.trim()) {
+        this.emit("status", { text: `/${command.name} の shell command が未設定です。` });
+        return;
+      }
+      const id = this.request("thread/shellCommand", { threadId: this.threadId, command: shellCommand });
+      this.pending.set(id, "thread/shellCommand");
+      this.emit("status", { text: `/${command.name} を実行しています。` });
+      return;
+    }
+    if (command.kind === "prompt") {
+      const text =
+        command.name === "goal"
+          ? parsed.args
+            ? `このセッションの目標を次の内容として扱ってください。必要なら利用可能な goal 機能で目標を設定し、以後の作業はこの達成条件に沿って進めてください。\n\n目標: ${parsed.args}`
+            : "現在のセッション目標を確認してください。目標が未設定または曖昧なら、現在の文脈から未確定事項を分けて短く報告してください。"
+          : command.name === "review"
+            ? "現在の working tree をコードレビューしてください。バグ、回帰、セキュリティ、テスト不足を優先して、高信頼度の指摘だけをファイル/行の根拠つきで報告してください。"
+            : renderSlashTemplate(command.template, parsed.args, parsed);
+      if (!text.trim()) {
+        this.emit("status", { text: `/${command.name} の prompt template が未設定です。` });
+        return;
+      }
+      this.prompt(text, [], options);
+      return;
+    }
+    this.emit("status", { text: `/${command.name} は browser 側で処理する command です。` });
+  }
+
   appendHistory(entry) {
     this.history.push(entry);
     this.history = capHistory(this.history);
@@ -980,6 +1057,7 @@ function bindBrowser(browser, phoneToken, threadId) {
       return;
     }
     if (msg.type === "prompt") bridge.prompt(msg.text, msg.attachments, msg.options);
+    if (msg.type === "slashCommand") bridge.slashCommand(msg.text, msg.options);
     if (msg.type === "approval") bridge.approval(msg.request, msg.decision);
   });
 }
@@ -1128,6 +1206,11 @@ async function main() {
     if (url.pathname === "/api/automations") {
       if (!requireToken(url, phoneToken, res)) return;
       sendJson(res, 200, { data: readAutomations() });
+      return;
+    }
+    if (url.pathname === "/api/slash-commands") {
+      if (!requireToken(url, phoneToken, res)) return;
+      sendJson(res, 200, { data: currentSlashCommands() });
       return;
     }
     if (url.pathname === "/api/artifacts") {

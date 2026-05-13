@@ -36,6 +36,7 @@ const threadSearch = document.querySelector("#threadSearch");
 const threadTitle = document.querySelector("#threadTitle");
 const composer = document.querySelector("#composer");
 const promptInput = document.querySelector("#prompt");
+const slashSuggestions = document.querySelector("#slashSuggestions");
 const sendButton = document.querySelector("#send");
 const approval = document.querySelector("#approval");
 const approvalText = document.querySelector("#approvalText");
@@ -88,6 +89,7 @@ let accessMode = {
 };
 let pendingFiles = [];
 let lastReviewDigestSignature = "";
+let slashCommandsCache = [];
 
 const panelWidthConfig = {
   left: { min: 188, max: 360, fallback: 232, storageKey: "codexLeftSidebarWidth", cssVar: "--thread-width" },
@@ -1026,6 +1028,82 @@ function appendToPrompt(text) {
   promptInput.focus();
 }
 
+function parseSlashInput(text) {
+  const raw = String(text || "").trim();
+  if (!raw.startsWith("/")) return null;
+  const match = raw.match(/^\/([A-Za-z0-9_-]+)(?:\s+([\s\S]*))?$/);
+  if (!match) return null;
+  return { raw, command: match[1].toLowerCase(), args: (match[2] || "").trim() };
+}
+
+async function slashCommands() {
+  if (slashCommandsCache.length) return slashCommandsCache;
+  const result = await apiGet("/api/slash-commands");
+  slashCommandsCache = result.data || [];
+  return slashCommandsCache;
+}
+
+function findClientSlashCommand(parsed) {
+  const name = parsed?.command || "";
+  return slashCommandsCache.find((command) => command.name === name || (command.aliases || []).includes(name)) || null;
+}
+
+function closeSlashSuggestions() {
+  slashSuggestions?.classList.add("hidden");
+  slashSuggestions?.replaceChildren();
+}
+
+async function updateSlashSuggestions() {
+  if (!slashSuggestions) return;
+  const value = promptInput.value.trim();
+  if (!value.startsWith("/") || value.includes("\n")) {
+    closeSlashSuggestions();
+    return;
+  }
+  try {
+    const query = value.slice(1).split(/\s+/)[0].toLowerCase();
+    const commands = await slashCommands();
+    const matches = commands
+      .filter((command) => command.name.startsWith(query) || (command.aliases || []).some((alias) => alias.startsWith(query)))
+      .slice(0, 8);
+    slashSuggestions.replaceChildren();
+    for (const command of matches) {
+      const row = document.createElement("button");
+      row.type = "button";
+      row.className = "slash-suggestion";
+      row.innerHTML = `<strong>${escapeHtml(command.usage || `/${command.name}`)}</strong><small>${escapeHtml(command.description || "")}</small>`;
+      row.addEventListener("click", () => {
+        promptInput.value = `${command.usage || `/${command.name}`}${/\s/.test(command.usage || "") ? "" : " "}`;
+        promptInput.focus();
+        closeSlashSuggestions();
+      });
+      slashSuggestions.appendChild(row);
+    }
+    slashSuggestions.classList.toggle("hidden", !matches.length);
+  } catch {
+    closeSlashSuggestions();
+  }
+}
+
+function handleClientSlashCommand(parsed) {
+  if (parsed?.command === "status") {
+    showStatus();
+    return true;
+  }
+  if (parsed?.command === "new") {
+    selectThread("");
+    return true;
+  }
+  if (parsed?.command === "commands" || parsed?.command === "help") {
+    showSlashCommands();
+    return true;
+  }
+  const command = findClientSlashCommand(parsed);
+  if (!command || command.kind !== "client") return false;
+  showSlashCommands();
+  return true;
+}
+
 function renderArtifactIndex(items) {
   artifactItems = items;
   activeArtifactPath = "";
@@ -1261,12 +1339,32 @@ async function showReview() {
   }
 }
 
+async function showSlashCommands() {
+  clearPanel("Slash Commands", "sources");
+  addPanelRow("読み込み中...");
+  try {
+    const commands = await slashCommands();
+    artifactList.replaceChildren();
+    for (const command of commands) {
+      addPanelRow(command.usage || `/${command.name}`, command.description || command.kind || "", () => {
+        promptInput.value = `${command.usage || `/${command.name}`}${/\s/.test(command.usage || "") ? "" : " "}`;
+        promptInput.focus();
+        closeSlashSuggestions();
+      }, command.kind === "client" ? "UI" : command.kind === "shell" ? "$" : "/");
+    }
+    if (!commands.length) addPanelRow("Slash command は見つかりませんでした");
+  } catch (error) {
+    showToolError("Slash Commands", error);
+  }
+}
+
 function showSources() {
   clearPanel("情報源", "sources");
   addPanelRow("Web調査を入力へ追加", "外部確認が必要なターンで使う", () => {
     appendToPrompt("Web調査を使って確認してください。");
     addStatus("Web調査指示をチャット入力へ追加しました。");
   }, "WEB");
+  addPanelRow("Slash commands", "/compact、/diff、/review など", showSlashCommands, "/");
   addPanelRow("ローカルファイル", "Filesタブから @path を追加できます", showWorkspace, "FILE");
   addPanelRow("差分レビュー", "Diffタブから変更ファイルを追加できます", showReview, "DIFF");
 }
@@ -1567,6 +1665,29 @@ composer.addEventListener("submit", (event) => {
   event.preventDefault();
   const text = promptInput.value.trim();
   if ((!text && !pendingFiles.length) || !ws || ws.readyState !== WebSocket.OPEN) return;
+  const slash = parseSlashInput(text);
+  if (slash && !pendingFiles.length) {
+    if (handleClientSlashCommand(slash)) {
+      promptInput.value = "";
+      closeSlashSuggestions();
+      return;
+    }
+    ws.send(
+      JSON.stringify({
+        type: "slashCommand",
+        token,
+        text,
+        options: {
+          model: selectedModel || undefined,
+          approvalPolicy: accessMode.approvalPolicy,
+          sandboxMode: accessMode.sandboxMode,
+        },
+      }),
+    );
+    promptInput.value = "";
+    closeSlashSuggestions();
+    return;
+  }
   ws.send(
     JSON.stringify({
       type: "prompt",
@@ -1581,6 +1702,7 @@ composer.addEventListener("submit", (event) => {
     }),
   );
   promptInput.value = "";
+  closeSlashSuggestions();
   pendingFiles = [];
   renderAttachments();
 });
@@ -1609,6 +1731,8 @@ searchButton.addEventListener("click", () => {
   openSidebar();
 });
 threadSearch.addEventListener("input", renderThreadList);
+promptInput.addEventListener("input", updateSlashSuggestions);
+promptInput.addEventListener("blur", () => setTimeout(closeSlashSuggestions, 120));
 pluginsButton.addEventListener("click", showPlugins);
 automationsButton.addEventListener("click", showAutomations);
 settingsButton.addEventListener("click", showSettings);

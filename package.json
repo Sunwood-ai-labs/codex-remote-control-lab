@@ -13,7 +13,7 @@
     "build:ui": "node scripts/build-ui.mjs",
     "screenshots:readme": "node scripts/capture-readme-screenshots.js",
     "test": "node --test scripts/*.test.js",
-    "check": "node scripts/build-ui.mjs --check && node --check scripts/start-phone.js && node --check scripts/probe-ws.js && node --check public/main.js",
+    "check": "node scripts/build-ui.mjs --check && node --check scripts/start-phone.js && node --check scripts/slash-commands.js && node --check scripts/probe-ws.js && node --check public/main.js",
     "docs:dev": "vitepress dev docs",
     "docs:build": "vitepress build docs",
     "docs:preview": "vitepress preview docs"
