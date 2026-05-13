@@ -84,6 +84,10 @@ let statusGroup = null;
 let threadCache = [];
 let liveTurnActive = false;
 let lastHistorySignature = "";
+let visibleHistoryThread = selectedThread;
+const maxThreadHistoryCacheSize = 50;
+const threadHistoryCache = new Map();
+const threadReadyNonce = new Map();
 let lastThreadListError = "";
 let lastThreadRefreshError = "";
 let selectedThreadRefreshActive = false;
@@ -984,6 +988,32 @@ function renderHistory(history) {
   for (const entry of history || []) addEntry(entry.type, entry.text, entry.attachments || []);
 }
 
+function cloneHistory(history = []) {
+  if (typeof structuredClone === "function") return structuredClone(history);
+  return JSON.parse(JSON.stringify(history || []));
+}
+
+function pruneThreadCaches() {
+  while (threadHistoryCache.size > maxThreadHistoryCacheSize) {
+    const oldestThreadId = threadHistoryCache.keys().next().value;
+    threadHistoryCache.delete(oldestThreadId);
+    threadReadyNonce.delete(oldestThreadId);
+  }
+}
+
+function rememberThreadHistory(threadId, history) {
+  if (!threadId) return;
+  threadHistoryCache.delete(threadId);
+  threadHistoryCache.set(threadId, cloneHistory(history));
+  pruneThreadCaches();
+}
+
+function incrementThreadReadyNonce(threadId) {
+  if (!threadId) return;
+  threadReadyNonce.set(threadId, (threadReadyNonce.get(threadId) || 0) + 1);
+  pruneThreadCaches();
+}
+
 function historySignature(history = []) {
   return JSON.stringify(
     history.map((entry) => ({
@@ -994,13 +1024,25 @@ function historySignature(history = []) {
   );
 }
 
-function renderHistoryIfChanged(history = []) {
+function renderHistoryIfChanged(history = [], { threadId = selectedThread, cache = true } = {}) {
   const signature = historySignature(history);
-  if (signature === lastHistorySignature) return false;
+  if (cache) rememberThreadHistory(threadId, history);
+  if (signature === lastHistorySignature && visibleHistoryThread === threadId) return false;
   lastHistorySignature = signature;
+  visibleHistoryThread = threadId;
   renderHistory(history);
   appendReviewDigest();
   return true;
+}
+
+function prepareThreadHistoryForConnect(threadId) {
+  if (!threadId) {
+    renderHistoryIfChanged([], { threadId: "", cache: false });
+    return;
+  }
+  const cachedHistory = threadHistoryCache.get(threadId);
+  if (cachedHistory) renderHistoryIfChanged(cachedHistory, { threadId, cache: false });
+  else renderHistoryIfChanged([{ type: "assistant", text: "thread履歴を読み込み中..." }], { threadId, cache: false });
 }
 
 function renderThreadList() {
@@ -1129,11 +1171,14 @@ async function loadThreads({ background = false } = {}) {
 
 async function refreshSelectedThread() {
   if (!selectedThread || liveTurnActive || selectedThreadRefreshActive) return;
+  const requestedThread = selectedThread;
+  const startedReadyNonce = threadReadyNonce.get(requestedThread) || 0;
   selectedThreadRefreshActive = true;
   try {
-    const result = await apiGet(`/api/thread?thread=${encodeURIComponent(selectedThread)}&provider=${encodeURIComponent(currentThreadProvider())}`);
-    if (result.threadId !== selectedThread) return;
-    renderHistoryIfChanged(result.history || []);
+    const result = await apiGet(`/api/thread?thread=${encodeURIComponent(requestedThread)}&provider=${encodeURIComponent(currentThreadProvider())}`);
+    if (result.threadId !== requestedThread || result.threadId !== selectedThread) return;
+    if ((threadReadyNonce.get(requestedThread) || 0) !== startedReadyNonce) return;
+    renderHistoryIfChanged(result.history || [], { threadId: result.threadId });
     lastThreadRefreshError = "";
   } catch (error) {
     const message = error.message || String(error);
@@ -1865,26 +1910,29 @@ function connect() {
   if (ws) ws.close();
   liveTurnActive = false;
   setRunState("connecting");
-  lastHistorySignature = "";
-  renderHistory([]);
+  prepareThreadHistoryForConnect(selectedThread);
   const selected = threadCache.find((thread) => thread.id === selectedThread);
   threadTitle.textContent = selected ? titleForThread(selected) : "新しい共有thread";
+  if (selectedThread) refreshSelectedThread();
 
   const proto = location.protocol === "https:" ? "wss:" : "ws:";
   const query = new URLSearchParams();
   if (tokenRequired && token) query.set("token", token);
   if (selectedThread) query.set("thread", selectedThread);
   const bridgeQuery = query.toString();
-  ws = new WebSocket(`${proto}//${location.host}/bridge${bridgeQuery ? `?${bridgeQuery}` : ""}`);
+  const socket = new WebSocket(`${proto}//${location.host}/bridge${bridgeQuery ? `?${bridgeQuery}` : ""}`);
+  ws = socket;
   connectButton.disabled = true;
   meta.textContent = "接続中";
 
-  ws.addEventListener("open", () => {
+  socket.addEventListener("open", (event) => {
+    if (event.currentTarget !== ws) return;
     setRunState("connecting", "Codex に接続中");
     addEntry("status", "Macの共有ブリッジへ接続しました。");
   });
 
-  ws.addEventListener("message", (event) => {
+  socket.addEventListener("message", (event) => {
+    if (event.currentTarget !== ws) return;
     let msg;
     try {
       msg = JSON.parse(event.data);
@@ -1902,8 +1950,10 @@ function connect() {
         if (activeProvider === "codex") selectedModelLabel = selectedModelLabel.toUpperCase();
         updateModelButton();
       }
+      const readyThreadId = msg.threadId || selectedThread;
+      incrementThreadReadyNonce(readyThreadId);
       syncReadyThread(msg.threadId);
-      renderHistoryIfChanged(msg.history || []);
+      renderHistoryIfChanged(msg.history || [], { threadId: readyThreadId });
       meta.textContent = `${msg.model}  •  ${msg.clients}端末  •  ${msg.workdir}`;
       setRunState(msg.run?.state || "ready", msg.run?.label);
       addEntry("status", `共有${providerLabel(msg.provider || "codex")} thread ready: ${msg.threadId}`);
@@ -1959,7 +2009,8 @@ function connect() {
     }
   });
 
-  ws.addEventListener("close", () => {
+  socket.addEventListener("close", (event) => {
+    if (event.currentTarget !== ws) return;
     setReady(false);
     interruptRequestPending = false;
     updateInterruptButton();

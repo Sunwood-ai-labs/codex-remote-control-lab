@@ -69,6 +69,15 @@ async function mockApi(page, state = {}) {
       await route.fulfill({ json: { data: threads, threads } });
       return;
     }
+    if (url.pathname === "/api/thread") {
+      const threadId = url.searchParams.get("thread");
+      const delay = state.threadDelays?.[threadId] || 0;
+      if (delay) await new Promise((resolve) => setTimeout(resolve, delay));
+      await route.fulfill({
+        json: state.threadSnapshots?.[threadId] || { threadId, history: [] },
+      });
+      return;
+    }
     if (url.pathname === "/api/review") {
       await route.fulfill({ json: state.review || { clean: true, files: [], totals: { additions: 0, deletions: 0 } } });
       return;
@@ -96,10 +105,11 @@ async function mockApi(page, state = {}) {
   });
 }
 
-async function mockWebSocket(page) {
-  await page.addInitScript((readyPayload) => {
+async function mockWebSocket(page, options = {}) {
+  await page.addInitScript((config) => {
     window.__sentFrames = [];
     window.__mockSockets = [];
+    window.__mockSocketUrls = [];
     window.__dispatchServerMessage = (payload) => {
       for (const socket of window.__mockSockets) {
         socket.dispatchEvent(new MessageEvent("message", { data: JSON.stringify(payload) }));
@@ -109,15 +119,22 @@ async function mockWebSocket(page) {
       for (const socket of window.__mockSockets) socket.close();
     };
     class MockWebSocket extends EventTarget {
-      constructor() {
+      constructor(url) {
         super();
         this.readyState = MockWebSocket.CONNECTING;
+        this.url = url;
+        window.__mockSocketUrls.push(url);
         window.__mockSockets.push(this);
+        const socketUrl = new URL(url, location.href);
+        const threadId = socketUrl.searchParams.get("thread") || "";
+        const readyPayload = config.readyPayloadByThread[threadId] || config.defaultReadyPayload;
+        const readyDelay = config.readyDelayByThread[threadId] ?? config.defaultReadyDelay;
         setTimeout(() => {
+          if (!readyPayload) return;
           this.readyState = MockWebSocket.OPEN;
           this.dispatchEvent(new Event("open"));
           this.dispatchEvent(new MessageEvent("message", { data: JSON.stringify(readyPayload) }));
-        }, 10);
+        }, readyDelay);
       }
       send(frame) {
         window.__sentFrames.push(JSON.parse(frame));
@@ -133,12 +150,17 @@ async function mockWebSocket(page) {
     MockWebSocket.CLOSED = 3;
     window.WebSocket = MockWebSocket;
   }, {
-    type: "ready",
-    threadId: "thread-web-send",
-    history: [],
-    model: "gpt-5.5",
-    clients: 1,
-    workdir: root,
+    defaultReadyPayload: options.defaultReadyPayload || {
+      type: "ready",
+      threadId: "thread-web-send",
+      history: [],
+      model: "gpt-5.5",
+      clients: 1,
+      workdir: root,
+    },
+    defaultReadyDelay: options.defaultReadyDelay ?? 10,
+    readyDelayByThread: options.readyDelayByThread || {},
+    readyPayloadByThread: options.readyPayloadByThread || {},
   });
 }
 
@@ -412,4 +434,193 @@ test("plugin panel empty state explains when no plugins are installed", async (t
   const panelText = await page.locator("#artifactList").innerText();
   assert.match(panelText, /導入済み\/有効なプラグインはありません/);
   assert.doesNotMatch(panelText, /Uninstalled Plugin/);
+});
+
+test("thread switching keeps a transition entry until target history is ready", async (t) => {
+  const server = await startStaticServer();
+  let browser;
+  t.after(async () => {
+    if (browser) await browser.close();
+    await server.close();
+  });
+
+  browser = await chromium.launch();
+  const page = await browser.newPage({ viewport: { width: 1280, height: 844 }, deviceScaleFactor: 1 });
+  const apiState = {
+    threads: [
+      { id: "thread-a", name: "Thread A", cwd: root, updatedAt: Date.now() },
+      { id: "thread-b", name: "Thread B", cwd: root, updatedAt: Date.now() },
+    ],
+    threadDelays: { "thread-b": 160 },
+    threadSnapshots: {
+      "thread-b": {
+        threadId: "thread-b",
+        history: [{ type: "assistant", text: "target snapshot answer" }],
+      },
+    },
+  };
+  await mockApi(page, apiState);
+  await mockWebSocket(page, {
+    readyPayloadByThread: {
+      "thread-a": {
+        type: "ready",
+        threadId: "thread-a",
+        history: [{ type: "assistant", text: "current thread answer" }],
+        model: "gpt-5.5",
+        clients: 1,
+        workdir: root,
+      },
+      "thread-b": {
+        type: "ready",
+        threadId: "thread-b",
+        history: [{ type: "assistant", text: "target ready answer" }],
+        model: "gpt-5.5",
+        clients: 1,
+        workdir: root,
+      },
+    },
+    readyDelayByThread: { "thread-b": 360 },
+  });
+
+  await page.goto(`${server.origin}/?token=${token}&thread=thread-a`, { waitUntil: "networkidle" });
+  await page.waitForSelector("#send:not([disabled])");
+  await page.getByText("current thread answer").waitFor();
+
+  await page.getByRole("button", { name: /Thread B/ }).click();
+  await page.waitForTimeout(60);
+
+  let logText = await page.locator("#log").innerText();
+  assert.match(logText, /thread履歴を読み込み中/);
+  assert.doesNotMatch(logText, /current thread answer/);
+  assert.doesNotMatch(logText, /target snapshot answer|target ready answer/);
+
+  await page.getByText("target snapshot answer").waitFor();
+  logText = await page.locator("#log").innerText();
+  assert.doesNotMatch(logText, /current thread answer/);
+  assert.match(logText, /target snapshot answer/);
+
+  await page.getByText("target ready answer").waitFor();
+  logText = await page.locator("#log").innerText();
+  assert.doesNotMatch(logText, /target snapshot answer/);
+  assert.match(logText, /target ready answer/);
+
+  await page.locator("#newThread").click();
+  await page.waitForTimeout(30);
+  logText = await page.locator("#log").innerText();
+  assert.doesNotMatch(logText, /target ready answer|current thread answer/);
+});
+
+test("slower thread snapshot does not overwrite ready thread history", async (t) => {
+  const server = await startStaticServer();
+  let browser;
+  t.after(async () => {
+    if (browser) await browser.close();
+    await server.close();
+  });
+
+  browser = await chromium.launch();
+  const page = await browser.newPage({ viewport: { width: 1280, height: 844 }, deviceScaleFactor: 1 });
+  const apiState = {
+    threads: [
+      { id: "thread-a", name: "Thread A", cwd: root, updatedAt: Date.now() },
+      { id: "thread-b", name: "Thread B", cwd: root, updatedAt: Date.now() },
+    ],
+    threadDelays: { "thread-b": 460 },
+    threadSnapshots: {
+      "thread-b": {
+        threadId: "thread-b",
+        history: [{ type: "assistant", text: "late stale snapshot answer" }],
+      },
+    },
+  };
+  await mockApi(page, apiState);
+  await mockWebSocket(page, {
+    readyPayloadByThread: {
+      "thread-a": {
+        type: "ready",
+        threadId: "thread-a",
+        history: [{ type: "assistant", text: "current thread answer" }],
+        model: "gpt-5.5",
+        clients: 1,
+        workdir: root,
+      },
+      "thread-b": {
+        type: "ready",
+        threadId: "thread-b",
+        history: [{ type: "assistant", text: "fresh ready answer" }],
+        model: "gpt-5.5",
+        clients: 1,
+        workdir: root,
+      },
+    },
+    readyDelayByThread: { "thread-b": 140 },
+  });
+
+  await page.goto(`${server.origin}/?token=${token}&thread=thread-a`, { waitUntil: "networkidle" });
+  await page.waitForSelector("#send:not([disabled])");
+  await page.getByText("current thread answer").waitFor();
+
+  await page.getByRole("button", { name: /Thread B/ }).click();
+  await page.getByText("fresh ready answer").waitFor();
+  await page.waitForTimeout(520);
+
+  const logText = await page.locator("#log").innerText();
+  assert.match(logText, /fresh ready answer/);
+  assert.doesNotMatch(logText, /late stale snapshot answer|current thread answer/);
+});
+
+test("stale WebSocket ready messages from previous switches are ignored", async (t) => {
+  const server = await startStaticServer();
+  let browser;
+  t.after(async () => {
+    if (browser) await browser.close();
+    await server.close();
+  });
+
+  browser = await chromium.launch();
+  const page = await browser.newPage({ viewport: { width: 1280, height: 844 }, deviceScaleFactor: 1 });
+  const apiState = {
+    threads: [
+      { id: "thread-a", name: "Thread A", cwd: root, updatedAt: Date.now() },
+      { id: "thread-b", name: "Thread B", cwd: root, updatedAt: Date.now() },
+    ],
+    threadSnapshots: {
+      "thread-a": { threadId: "thread-a", history: [{ type: "assistant", text: "thread a snapshot" }] },
+      "thread-b": { threadId: "thread-b", history: [{ type: "assistant", text: "thread b snapshot" }] },
+    },
+  };
+  await mockApi(page, apiState);
+  await mockWebSocket(page, {
+    readyPayloadByThread: {
+      "thread-a": {
+        type: "ready",
+        threadId: "thread-a",
+        history: [{ type: "assistant", text: "thread a ready" }],
+        model: "gpt-5.5",
+        clients: 1,
+        workdir: root,
+      },
+      "thread-b": {
+        type: "ready",
+        threadId: "thread-b",
+        history: [{ type: "assistant", text: "stale thread b ready" }],
+        model: "gpt-5.5",
+        clients: 1,
+        workdir: root,
+      },
+    },
+    readyDelayByThread: { "thread-b": 180 },
+  });
+
+  await page.goto(`${server.origin}/?token=${token}&thread=thread-a`, { waitUntil: "networkidle" });
+  await page.waitForSelector("#send:not([disabled])");
+  await page.getByText("thread a ready").waitFor();
+
+  await page.getByRole("button", { name: /Thread B/ }).click();
+  await page.getByRole("button", { name: /Thread A/ }).click();
+  await page.waitForTimeout(260);
+
+  const logText = await page.locator("#log").innerText();
+  assert.match(logText, /thread a ready|thread a snapshot/);
+  assert.doesNotMatch(logText, /stale thread b ready|thread b snapshot/);
 });
