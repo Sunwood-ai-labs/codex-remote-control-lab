@@ -43,6 +43,7 @@ const closePromptModalButton = document.querySelector("#closePromptModalButton")
 const cancelPromptModalButton = document.querySelector("#cancelPromptModalButton");
 const applyPromptModalButton = document.querySelector("#applyPromptModalButton");
 const sendButton = document.querySelector("#send");
+const interruptButton = document.querySelector("#interruptRun");
 const approval = document.querySelector("#approval");
 const approvalText = document.querySelector("#approvalText");
 const approveButton = document.querySelector("#approve");
@@ -87,6 +88,8 @@ let settingsRenderSeq = 0;
 let artifactItems = [];
 let activeArtifactPath = "";
 let activePanel = "artifacts";
+let currentRunState = "connecting";
+let interruptRequestPending = false;
 let accessMode = {
   label: "フルアクセス",
   approvalPolicy: "never",
@@ -107,18 +110,44 @@ const runStateText = {
   streaming: "回答生成中",
   reconnecting: "再接続中",
   approval: "承認待ち",
+  interrupting: "中断中",
+  interrupted: "中断しました",
   syncing: "履歴同期中",
   done: "完了",
   disconnected: "切断",
   error: "エラー",
 };
+const interruptibleRunStates = new Set(["running", "streaming", "approval", "interrupting"]);
+const terminalRunStates = new Set(["ready", "done", "interrupted", "disconnected", "error"]);
+
+function updateInterruptButton() {
+  if (!interruptButton) return;
+  const visible = interruptibleRunStates.has(currentRunState);
+  const disabled =
+    !visible || currentRunState === "interrupting" || interruptRequestPending || !ws || ws.readyState !== WebSocket.OPEN;
+  let label = "現在の処理を中断";
+  if (visible && (currentRunState === "interrupting" || interruptRequestPending)) label = "中断要求を送信中です";
+  else if (visible && (!ws || ws.readyState !== WebSocket.OPEN)) label = "接続後に処理を中断";
+  interruptButton.classList.toggle("hidden", !visible);
+  interruptButton.disabled = disabled;
+  interruptButton.title = label;
+  interruptButton.setAttribute("aria-label", label);
+}
 
 function setRunState(state, label) {
   if (!runState || !runStateLabel) return;
   const nextLabel = label || runStateText[state] || state;
-  if (runState.dataset.state === state && runStateLabel.textContent === nextLabel) return;
-  runState.dataset.state = state;
-  runStateLabel.textContent = nextLabel;
+  currentRunState = state;
+  if (terminalRunStates.has(state)) interruptRequestPending = false;
+  if (state !== "approval" && pendingApproval) {
+    pendingApproval = null;
+    approval.classList.add("hidden");
+  }
+  if (runState.dataset.state !== state || runStateLabel.textContent !== nextLabel) {
+    runState.dataset.state = state;
+    runStateLabel.textContent = nextLabel;
+  }
+  updateInterruptButton();
 }
 
 function parseMaybeJson(value) {
@@ -845,6 +874,7 @@ function shouldSuppressBackgroundFetchError(message) {
 function setReady(ready) {
   sendButton.disabled = !ready;
   promptInput.disabled = !ready;
+  updateInterruptButton();
 }
 
 function renderHistory(history) {
@@ -1600,7 +1630,7 @@ function connect() {
       syncReadyThread(msg.threadId);
       renderHistoryIfChanged(msg.history || []);
       meta.textContent = `${msg.model}  •  ${msg.clients}端末  •  ${msg.workdir}`;
-      setRunState("ready");
+      setRunState(msg.run?.state || "ready", msg.run?.label);
       addEntry("status", `共有Codex thread ready: ${msg.threadId}`);
       return;
     }
@@ -1625,11 +1655,15 @@ function connect() {
       approval.classList.remove("hidden");
       return;
     }
+    if (msg.type === "runState") {
+      setRunState(msg.run?.state || "ready", msg.run?.label);
+      return;
+    }
     if (msg.type === "turn" && msg.status === "completed") {
       liveTurnActive = false;
       lastHistorySignature = "";
       assistantEntry = null;
-      setRunState("done", "完了しました");
+      setRunState(msg.run?.state || "done", msg.run?.label || "完了しました");
       loadThreads();
       refreshSelectedThread();
       appendReviewDigest();
@@ -1652,6 +1686,8 @@ function connect() {
 
   ws.addEventListener("close", () => {
     setReady(false);
+    interruptRequestPending = false;
+    updateInterruptButton();
     connectButton.disabled = false;
     meta.textContent = "切断";
     setRunState("disconnected");
@@ -1678,6 +1714,25 @@ composer.addEventListener("submit", (event) => {
   promptInput.value = "";
   pendingFiles = [];
   renderAttachments();
+});
+
+interruptButton?.addEventListener("click", () => {
+  if (!interruptibleRunStates.has(currentRunState) || interruptRequestPending) return;
+  if (!ws || ws.readyState !== WebSocket.OPEN) {
+    addStatus("未接続のため中断要求を送信できません。");
+    return;
+  }
+  interruptRequestPending = true;
+  pendingApproval = null;
+  approval.classList.add("hidden");
+  setRunState("interrupting", "中断要求を送信中");
+  try {
+    ws.send(JSON.stringify({ type: "interrupt", token }));
+  } catch (error) {
+    interruptRequestPending = false;
+    updateInterruptButton();
+    addEntry("error", `中断要求の送信に失敗しました: ${error.message}`);
+  }
 });
 
 approveButton.addEventListener("click", () => {

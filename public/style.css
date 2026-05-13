@@ -42,6 +42,7 @@
   --state-ready: #168a5f;
   --state-running: #2e6fbb;
   --state-approval: #8f4c00;
+  --state-interrupted: #6d5c00;
   --surface-under: #e6e7df;
   --surface-raised: #fffffb;
   --focus: #2d7ff9;
@@ -96,6 +97,7 @@
   --state-ready: #62ff6b;
   --state-running: #62ff6b;
   --state-approval: #ffe97d;
+  --state-interrupted: #ffe97d;
   --surface-under: #020704;
   --surface-raised: #05120a;
   --focus: #62ff6b;
@@ -145,6 +147,7 @@
   --state-ready: #2e7d4a;
   --state-running: #2f7aa0;
   --state-approval: #7a5216;
+  --state-interrupted: #75601d;
 }
 
 /* =================================================================
@@ -191,6 +194,7 @@
   --state-ready: #a3c3e5;
   --state-running: #84a9d5;
   --state-approval: #ab6872;
+  --state-interrupted: #f1b9c2;
   --surface-under: #010a14;
   --surface-raised: #121f31;
   --focus: #bed9f2;
@@ -376,6 +380,7 @@ body::before {
 
 :root[data-theme="cyberpunk"] .run-state[data-state="running"],
 :root[data-theme="cyberpunk"] .run-state[data-state="streaming"],
+:root[data-theme="cyberpunk"] .run-state[data-state="interrupting"],
 :root[data-theme="cyberpunk"] .run-state[data-state="connecting"] {
   border-color: rgba(98, 255, 107, 0.38);
   color: var(--state-running);
@@ -1486,6 +1491,7 @@ body.hide-artifacts .artifact-panel {
 
 .run-state[data-state="running"],
 .run-state[data-state="streaming"],
+.run-state[data-state="interrupting"],
 .run-state[data-state="syncing"],
 .run-state[data-state="connecting"] {
   border-color: color-mix(in srgb, var(--state-running) 30%, var(--line));
@@ -1499,6 +1505,12 @@ body.hide-artifacts .artifact-panel {
   background: color-mix(in srgb, var(--state-approval) 9%, var(--card));
 }
 
+.run-state[data-state="interrupted"] {
+  border-color: color-mix(in srgb, var(--state-interrupted) 34%, var(--line));
+  color: var(--state-interrupted);
+  background: color-mix(in srgb, var(--state-interrupted) 8%, var(--card));
+}
+
 .run-state[data-state="error"],
 .run-state[data-state="disconnected"] {
   border-color: color-mix(in srgb, var(--error) 34%, var(--line));
@@ -1508,6 +1520,7 @@ body.hide-artifacts .artifact-panel {
 
 .run-state[data-state="running"] .run-state-dot,
 .run-state[data-state="streaming"] .run-state-dot,
+.run-state[data-state="interrupting"] .run-state-dot,
 .run-state[data-state="syncing"] .run-state-dot,
 .run-state[data-state="connecting"] .run-state-dot {
   animation: run-state-pulse 980ms ease-in-out infinite;
@@ -1784,6 +1797,7 @@ body.prompt-modal-open {
 .access-button,
 .model-button,
 .expand-button,
+.interrupt-button,
 .voice-button {
   display: inline-flex;
   align-items: center;
@@ -1802,6 +1816,7 @@ body.prompt-modal-open {
 .model-button:hover,
 .thinking-button:hover,
 .expand-button:hover,
+.interrupt-button:hover,
 .voice-button:hover {
   background: var(--hover);
   color: var(--nav-text);
@@ -1853,6 +1868,67 @@ body.prompt-modal-open {
 
 .voice-button.listening {
   color: var(--accent);
+}
+
+.interrupt-button {
+  gap: 5px;
+  flex: 0 0 auto;
+  min-width: 64px;
+  height: 36px;
+  border: 1px solid var(--warning-line);
+  border-radius: 999px;
+  padding: 0 10px;
+  background: var(--warning-bg);
+  color: var(--warning-text);
+  font-weight: 650;
+  letter-spacing: 0;
+}
+
+.interrupt-button:hover {
+  border-color: var(--warning-line);
+  background: color-mix(in srgb, var(--warning-bg) 82%, var(--hover));
+  color: var(--warning-text);
+}
+
+.interrupt-button:disabled {
+  opacity: 0.48;
+}
+
+.interrupt-button.hidden {
+  display: none;
+}
+
+.interrupt-icon {
+  position: relative;
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+  border: 2px solid currentColor;
+  background: transparent;
+  clip-path: polygon(30% 0, 70% 0, 100% 30%, 100% 70%, 70% 100%, 30% 100%, 0 70%, 0 30%);
+}
+
+.interrupt-icon::before,
+.interrupt-icon::after {
+  content: "";
+  position: absolute;
+  left: 4px;
+  right: 4px;
+  top: 50%;
+  border-top: 2px solid currentColor;
+}
+
+.interrupt-icon::before {
+  transform: translateY(-50%) rotate(45deg);
+}
+
+.interrupt-icon::after {
+  transform: translateY(-50%) rotate(-45deg);
+}
+
+.interrupt-label {
+  line-height: 1;
+  white-space: nowrap;
 }
 
 .model-menu {
@@ -2728,6 +2804,7 @@ body.prompt-modal-open {
   .model-button,
   .thinking-button,
   .expand-button,
+  .interrupt-button,
   .voice-button {
     padding-inline: 5px;
     min-height: 30px;
@@ -2738,6 +2815,17 @@ body.prompt-modal-open {
   .expand-button,
   .voice-button {
     width: 30px;
+  }
+
+  .interrupt-button {
+    min-width: 58px;
+    height: 32px;
+    padding: 0 8px;
+  }
+
+  .interrupt-icon {
+    width: 16px;
+    height: 16px;
   }
 
   .send-button {
@@ -2908,8 +2996,20 @@ body.prompt-modal-open {
   .access-button,
   .model-button,
   .thinking-button,
+  .interrupt-button,
   .voice-button {
     font-size: 13px;
+  }
+
+  .interrupt-button {
+    min-width: 30px;
+    width: 30px;
+    height: 30px;
+    padding: 0;
+  }
+
+  .interrupt-label {
+    display: none;
   }
 
   .thread-time {
