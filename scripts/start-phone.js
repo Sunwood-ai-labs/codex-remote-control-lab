@@ -276,12 +276,14 @@ function runRateLimitRefreshCommand(provider, command) {
       child.kill("SIGTERM");
       reject(new Error(`rate limit command timed out after ${rateLimitRefreshTimeoutMs}ms`));
     }, rateLimitRefreshTimeoutMs);
+    child.stdout.setEncoding("utf8");
     child.stdout.on("data", (chunk) => {
-      stdout += chunk.toString("utf8");
+      stdout += chunk;
       if (stdout.length > 64_000) child.kill("SIGTERM");
     });
+    child.stderr.setEncoding("utf8");
     child.stderr.on("data", (chunk) => {
-      stderr += chunk.toString("utf8");
+      stderr += chunk;
       if (stderr.length > 8_000) stderr = stderr.slice(-8_000);
     });
     child.on("error", (error) => {
@@ -485,6 +487,15 @@ function sendJson(res, status, body) {
     "cache-control": "no-store",
   });
   res.end(JSON.stringify(body));
+}
+
+function queryProvider(url, res) {
+  try {
+    return normalizeProvider(url.searchParams.get("provider") || agentProvider);
+  } catch (error) {
+    sendJson(res, 400, { error: error.message });
+    return null;
+  }
 }
 
 function requireToken(url, phoneToken, res) {
@@ -1393,7 +1404,10 @@ class ClaudeBridge {
     this.emitTo(browser, "ready", this.readyPayload());
     browser.on("close", () => {
       this.clients.delete(browser);
-      if (shouldDisposeIdleBridge({ clientCount: this.clients.size })) bridges.delete(this.bridgeKey);
+      if (shouldDisposeIdleBridge({ clientCount: this.clients.size })) {
+        this.dispose();
+        bridges.delete(this.bridgeKey);
+      }
     });
   }
 
@@ -1430,6 +1444,17 @@ class ClaudeBridge {
     bridges.delete(previousKey);
     bridges.set(this.bridgeKey, this);
     this.emit("ready", this.readyPayload());
+  }
+
+  dispose() {
+    this.turnQueue = [];
+    this.activeTurnId = null;
+    this.streamingStarted = false;
+    if (this.activeProcess) {
+      const child = this.activeProcess;
+      this.activeProcess = null;
+      if (!child.killed) child.kill("SIGTERM");
+    }
   }
 
   prompt(text, attachments = [], options = {}) {
@@ -1493,6 +1518,14 @@ class ClaudeBridge {
     let stderrBuffer = "";
     let assistantText = "";
 
+    const clearActiveProcess = () => {
+      if (this.activeProcess !== child && this.activeTurnId !== turnId) return false;
+      this.activeProcess = null;
+      this.activeTurnId = null;
+      this.streamingStarted = false;
+      return true;
+    };
+
     const handleLine = (line) => {
       if (!line.trim()) return;
       let msg;
@@ -1545,13 +1578,13 @@ class ClaudeBridge {
       }
     });
     child.on("error", (error) => {
+      if (!clearActiveProcess()) return;
       this.emit("error", { text: `Claudeを起動できませんでした: ${error.message}` });
+      this.startNextQueuedTurn();
     });
     child.on("exit", (code, signal) => {
+      if (!clearActiveProcess()) return;
       if (stdoutBuffer.trim()) handleLine(stdoutBuffer);
-      this.activeProcess = null;
-      this.activeTurnId = null;
-      this.streamingStarted = false;
       if (code === 0) {
         if (assistantText.trim()) this.appendHistory({ type: "assistant", text: assistantText, outputGroup: turnId });
         this.emit("turn", { status: "completed", turnId });
@@ -1627,7 +1660,8 @@ async function main() {
     }
     if (url.pathname === "/api/threads") {
       if (!requireToken(url, phoneToken, res)) return;
-      const requestedProvider = normalizeProvider(url.searchParams.get("provider") || agentProvider);
+      const requestedProvider = queryProvider(url, res);
+      if (!requestedProvider) return;
       if (requestedProvider === "claude") {
         sendJson(res, 200, claudeThreadListPayload());
         return;
@@ -1759,7 +1793,8 @@ async function main() {
     if (url.pathname === "/api/thread") {
       if (!requireToken(url, phoneToken, res)) return;
       const threadId = url.searchParams.get("thread");
-      const requestedProvider = normalizeProvider(url.searchParams.get("provider") || agentProvider);
+      const requestedProvider = queryProvider(url, res);
+      if (!requestedProvider) return;
       if (!threadId) {
         sendJson(res, 400, { error: "thread is required" });
         return;
