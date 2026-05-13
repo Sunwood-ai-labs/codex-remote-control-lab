@@ -238,3 +238,37 @@ test("mobile artifact preview stays open when launched from chat and panel rows"
   assert.equal(await page.locator("#artifactPanel").getAttribute("aria-hidden"), "false");
   assert.equal(await page.locator("body").evaluate((body) => body.classList.contains("show-panel")), true);
 });
+
+test("artifact card click still lets other document click handlers close menus", async (t) => {
+  const server = await startStaticServer();
+  let browser;
+  t.after(async () => {
+    if (browser) await browser.close();
+    await server.close();
+  });
+
+  browser = await chromium.launch();
+  const page = await browser.newPage({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 1 });
+  await mockApi(page, {
+    artifacts: [{ path: "README.md", name: "README.md", kind: "markdown" }],
+    files: {
+      "README.md": { path: "README.md", kind: "markdown", text: "# Artifact Preview\n\nRendered from a test artifact." },
+    },
+    review: {
+      clean: false,
+      files: [{ path: "README.md", status: "M", openable: true, additions: 1, deletions: 0 }],
+      totals: { additions: 1, deletions: 0 },
+    },
+  });
+  await mockWebSocket(page);
+  await page.goto(`${server.origin}/?token=${token}`, { waitUntil: "networkidle" });
+  await page.waitForSelector("#send:not([disabled])");
+
+  await page.evaluate(() => toggleModelMenu());
+  await page.waitForFunction(() => !document.querySelector("#modelMenu")?.classList.contains("hidden"));
+  await page.locator(".chat-artifact-card[data-open-artifact-path='README.md']").click();
+
+  await page.getByText("Rendered from a test artifact.").waitFor();
+  assert.equal(await page.locator("#artifactPanel").getAttribute("aria-hidden"), "false");
+  assert.equal(await page.locator("#modelMenu").evaluate((node) => node.classList.contains("hidden")), true);
+});

@@ -1552,7 +1552,8 @@ async function showStatus() {
 }
 
 async function showArtifact(path) {
-  showRightPanel({ focus: window.matchMedia("(max-width: 1100px)").matches });
+  const shouldFocusPanel = window.matchMedia("(max-width: 1100px)").matches;
+  showRightPanel();
   setActivePanel("artifacts");
   artifactTitle.textContent = "アーティファクト";
   artifactList.classList.add("artifact-browser-list");
@@ -1566,6 +1567,7 @@ async function showArtifact(path) {
     </div>
     <p>読み込み中...</p>
   `;
+  if (shouldFocusPanel) syncRightPanelState({ focus: true });
   try {
     const result = await apiGet(`/api/file?path=${encodeURIComponent(path)}`);
     setArtifactPreview(result);
@@ -1971,7 +1973,6 @@ modelMenu.addEventListener("click", (event) => {
 document.addEventListener("click", async (event) => {
   const artifactOpen = event.target.closest("[data-open-artifact-path]");
   if (artifactOpen) {
-    event.stopImmediatePropagation();
     showArtifact(artifactOpen.dataset.openArtifactPath);
     return;
   }
@@ -2021,6 +2022,7 @@ document.addEventListener("keydown", (event) => {
 document.addEventListener("click", (event) => {
   if (!document.body.classList.contains("show-panel")) return;
   if (window.matchMedia("(min-width: 1101px)").matches) return;
+  if (event.target.closest("[data-open-artifact-path]")) return;
   if (artifactPanel.contains(event.target) || menuButton.contains(event.target)) return;
   closeRightPanel({ restoreFocus: true });
 });
