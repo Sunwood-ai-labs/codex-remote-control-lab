@@ -11,6 +11,14 @@ npm ci
 npm run phone
 ```
 
+To start the same bridge UI against Claude Code instead of Codex, use the experimental Claude provider:
+
+```bash
+npm run phone:claude
+```
+
+This starts per-turn `claude -p --output-format stream-json` processes and reads same-workdir Claude Code JSONL sessions for the sidebar. Codex-only features such as app-server plugin lookup, live approval callbacks, and history sync are disabled in Claude mode. You can also select it explicitly with `PHONE_AGENT_PROVIDER=claude npm run phone`.
+
 The command prints one URL per LAN IPv4 address:
 
 ```text
@@ -72,6 +80,9 @@ In this mode, OCdex does not start a new app-server. It uses the app-server behi
 PHONE_UI_PORT=45214
 CODEX_WORKDIR=/Users/admin/Prj/some-project
 CODEX_MODEL=gpt-5.4
+PHONE_AGENT_PROVIDER=codex
+CLAUDE_WORKDIR=/Users/admin/Prj/some-project
+CLAUDE_MODEL=sonnet
 CODEX_APP_SERVER_SOCK=/Users/admin/.codex/app-server-control/app-server-control.sock
 CODEX_APP_SERVER_URL=ws://127.0.0.1:45213
 CODEX_HISTORY_SYNC=1

@@ -58,6 +58,8 @@ const rightResizeHandle = document.querySelector("#rightResizeHandle");
 const params = new URLSearchParams(location.search);
 const token = params.get("token") || localStorage.getItem("codexPhoneToken") || "";
 let selectedThread = params.get("thread") || "";
+let activeProvider = "codex";
+let threadProvider = params.get("provider") || "";
 let tokenRequired = true;
 let authMode = "token";
 if (token) localStorage.setItem("codexPhoneToken", token);
@@ -106,6 +108,26 @@ let accessMode = {
 };
 let pendingFiles = [];
 let lastReviewDigestSignature = "";
+
+function normalizeProviderName(provider) {
+  const value = String(provider || "").trim().toLowerCase();
+  if (value === "codex" || value === "claude") return value;
+  return "";
+}
+
+function providerLabel(provider) {
+  return provider === "claude" ? "Claude" : "Codex";
+}
+
+function currentThreadProvider() {
+  return normalizeProviderName(threadProvider || activeProvider) || "codex";
+}
+
+function setActiveProvider(provider) {
+  activeProvider = normalizeProviderName(provider) || "codex";
+  if (!threadProvider) threadProvider = activeProvider;
+  document.documentElement.dataset.provider = activeProvider;
+}
 
 const panelWidthConfig = {
   left: { min: 188, max: 360, fallback: 232, storageKey: "codexLeftSidebarWidth", cssVar: "--thread-width" },
@@ -279,9 +301,12 @@ function setAccessButtonLabel() {
 }
 
 function updateModelButton() {
-  modelButton.innerHTML = `<span class="model-button-label">${escapeHtml(`${selectedModelLabel} ${selectedReasoning}`)}</span>${fontAwesomeIcon("chevronDown", "button-chevron-icon")}`;
-  modelButton.setAttribute("aria-label", `モデル ${selectedModelLabel}、インテリジェンス ${selectedReasoning}`);
+  const showReasoning = activeProvider === "codex";
+  const label = showReasoning ? `${selectedModelLabel} ${selectedReasoning}` : selectedModelLabel;
+  modelButton.innerHTML = `<span class="model-button-label">${escapeHtml(label)}</span>${fontAwesomeIcon("chevronDown", "button-chevron-icon")}`;
+  modelButton.setAttribute("aria-label", showReasoning ? `モデル ${selectedModelLabel}、インテリジェンス ${selectedReasoning}` : `モデル ${selectedModelLabel}`);
   for (const row of modelMenu.querySelectorAll("[data-reasoning]")) {
+    row.hidden = !showReasoning;
     const active = row.dataset.reasoning === selectedReasoning;
     row.classList.toggle("active", active);
     row.setAttribute("aria-checked", String(active));
@@ -296,6 +321,7 @@ function updateModelButton() {
     }
   }
   for (const row of modelMenu.querySelectorAll("[data-model-choice]")) {
+    row.hidden = activeProvider !== "codex";
     const active = row.dataset.modelChoice === selectedModel;
     row.classList.toggle("active", active);
     row.setAttribute("aria-checked", String(active));
@@ -324,7 +350,8 @@ function selectReasoning(value) {
 
 function selectModel(model) {
   selectedModel = model;
-  selectedModelLabel = model.replace(/^gpt-/, "").toUpperCase().replace(/^GPT-/, "");
+  selectedModelLabel = model.replace(/^gpt-/i, "").replace(/^claude-/i, "");
+  if (activeProvider === "codex") selectedModelLabel = selectedModelLabel.toUpperCase();
   if (selectedModelLabel.startsWith("5.")) selectedModelLabel = selectedModelLabel;
   localStorage.setItem("codexPhoneModel", selectedModel);
   localStorage.setItem("codexPhoneModelLabel", selectedModelLabel);
@@ -947,7 +974,7 @@ function renderThreadList() {
   const newProject = document.createElement("button");
   newProject.type = "button";
   newProject.className = selectedThread ? "project-heading new-project" : "project-heading new-project active";
-  newProject.innerHTML = `${fontAwesomeIcon("folderPlus", "project-icon")}<span>New project</span>`;
+  newProject.innerHTML = `${fontAwesomeIcon("folderPlus", "project-icon")}<span>New ${providerLabel(currentThreadProvider())} thread</span>`;
   newProject.addEventListener("click", () => selectThread(""));
   threadList.appendChild(newProject);
 
@@ -1023,6 +1050,12 @@ async function apiGet(path) {
 async function loadBridgeInfo() {
   try {
     const info = await apiGet("/api/info");
+    setActiveProvider(info.provider || "codex");
+    if (info.model) {
+      selectedModelLabel = info.model.replace(/^gpt-/i, "").replace(/^claude-/i, "");
+      localStorage.setItem("codexPhoneModelLabel", selectedModelLabel);
+      updateModelButton();
+    }
     tokenRequired = info.tokenRequired !== false;
     authMode = info.authMode || (tokenRequired ? "token" : "debug-no-token");
     if (!tokenRequired) {
@@ -1039,8 +1072,10 @@ async function loadBridgeInfo() {
 async function loadThreads({ background = false } = {}) {
   if (tokenRequired && !token) return;
   try {
-    const result = await apiGet("/api/threads");
-    threadCache = result.data || [];
+    const provider = currentThreadProvider();
+    const result = await apiGet(`/api/threads?provider=${encodeURIComponent(provider)}`);
+    if (result.activeProvider) setActiveProvider(result.activeProvider);
+    threadCache = (result.data || []).map((thread) => ({ ...thread, provider: result.provider || provider }));
     renderThreadList();
     lastThreadListError = "";
   } catch (error) {
@@ -1061,7 +1096,7 @@ async function refreshSelectedThread() {
   if (!selectedThread || liveTurnActive || selectedThreadRefreshActive) return;
   selectedThreadRefreshActive = true;
   try {
-    const result = await apiGet(`/api/thread?thread=${encodeURIComponent(selectedThread)}`);
+    const result = await apiGet(`/api/thread?thread=${encodeURIComponent(selectedThread)}&provider=${encodeURIComponent(currentThreadProvider())}`);
     if (result.threadId !== selectedThread) return;
     renderHistoryIfChanged(result.history || []);
     lastThreadRefreshError = "";
@@ -1091,6 +1126,8 @@ function updateUrlThread() {
   const next = new URL(location.href);
   if (selectedThread) next.searchParams.set("thread", selectedThread);
   else next.searchParams.delete("thread");
+  if (currentThreadProvider() !== "codex") next.searchParams.set("provider", currentThreadProvider());
+  else next.searchParams.delete("provider");
   history.replaceState(null, "", next);
 }
 
@@ -1268,6 +1305,7 @@ async function showSettings() {
     if (renderSeq !== settingsRenderSeq) return;
     loadingRow.remove();
     const config = result.config?.config || {};
+    addPanelRow("Provider", config.provider || activeProvider);
     addPanelRow("認証", result.auth?.authMethod || "unknown");
     addPanelRow("既定モデル", config.model || selectedModel || "unknown");
     addPanelRow("承認", accessMode.approvalPolicy);
@@ -1458,8 +1496,9 @@ async function showStatus() {
   try {
     const result = await apiGet("/api/status");
     setWorkspaceMeta(result);
+    addPanelRow("Provider", result.provider || activeProvider);
     addPanelRow("UI port", String(result.uiPort));
-    addPanelRow("Codex app-server", result.codexUrl);
+    addPanelRow("Codex app-server", result.codexUrl || "未使用");
     addPanelRow("履歴同期", result.historySyncEnabled ? "有効" : "無効");
     addPanelRow("リポジトリ", result.repoName || "");
     addPanelRow("現在地", result.workspaceLocation || result.workdir || "");
@@ -1637,6 +1676,13 @@ function connect() {
     addEntry("error", "URLに token がありません。Mac側に表示されたURLをそのまま開いてください。");
     return;
   }
+  if (currentThreadProvider() !== activeProvider) {
+    if (ws) ws.close();
+    setReady(false);
+    meta.textContent = `${providerLabel(currentThreadProvider())} は ${providerLabel(activeProvider)} bridge では開けません`;
+    setRunState("disconnected", "Providerが違います");
+    return;
+  }
   if (ws) ws.close();
   liveTurnActive = false;
   setRunState("connecting");
@@ -1671,11 +1717,17 @@ function connect() {
     if (msg.type === "ready") {
       setReady(true);
       setWorkspaceMeta(msg);
+      setActiveProvider(msg.provider || activeProvider);
+      if (msg.model) {
+        selectedModelLabel = msg.model.replace(/^gpt-/i, "").replace(/^claude-/i, "");
+        if (activeProvider === "codex") selectedModelLabel = selectedModelLabel.toUpperCase();
+        updateModelButton();
+      }
       syncReadyThread(msg.threadId);
       renderHistoryIfChanged(msg.history || []);
       meta.textContent = `${msg.model}  •  ${msg.clients}端末  •  ${msg.workdir}`;
       setRunState(msg.run?.state || "ready", msg.run?.label);
-      addEntry("status", `共有Codex thread ready: ${msg.threadId}`);
+      addEntry("status", `共有${providerLabel(msg.provider || "codex")} thread ready: ${msg.threadId}`);
       return;
     }
     if (msg.type === "user") {
