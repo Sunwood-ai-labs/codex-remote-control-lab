@@ -1393,7 +1393,15 @@ function renderArtifactRows() {
   for (const item of artifactItems) {
     const icon = item.kind === "image" ? "IMG" : item.kind === "markdown" ? "MD" : "FILE";
     const label = item.name || item.path?.split(/[\\/]/).filter(Boolean).pop() || "artifact";
-    const row = addPanelRow(label, item.path || "", () => showArtifact(item.path), icon);
+    const row = addPanelRow(
+      label,
+      item.path || "",
+      (event) => {
+        event.stopPropagation();
+        showArtifact(item.path);
+      },
+      icon
+    );
     row.classList.toggle("active", item.path === activeArtifactPath);
   }
   if (!artifactItems.length) addPanelRow("アーティファクトは見つかりませんでした");
@@ -1674,6 +1682,7 @@ async function showStatus() {
 }
 
 async function showArtifact(path) {
+  const shouldFocusPanel = window.matchMedia("(max-width: 1100px)").matches;
   showRightPanel();
   setActivePanel("artifacts");
   artifactTitle.textContent = "アーティファクト";
@@ -1688,6 +1697,7 @@ async function showArtifact(path) {
     </div>
     <p>読み込み中...</p>
   `;
+  if (shouldFocusPanel) syncRightPanelState({ focus: true });
   try {
     const result = await apiGet(`/api/file?path=${encodeURIComponent(path)}`);
     setArtifactPreview(result);
@@ -2165,6 +2175,7 @@ document.addEventListener("keydown", (event) => {
 document.addEventListener("click", (event) => {
   if (!document.body.classList.contains("show-panel")) return;
   if (window.matchMedia("(min-width: 1101px)").matches) return;
+  if (event.target.closest("[data-open-artifact-path]")) return;
   if (artifactPanel.contains(event.target) || menuButton.contains(event.target)) return;
   closeRightPanel({ restoreFocus: true });
 });

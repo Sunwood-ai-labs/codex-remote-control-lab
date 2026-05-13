@@ -56,7 +56,8 @@ async function mockApi(page, state = {}) {
       return;
     }
     if (url.pathname === "/api/artifacts") {
-      await route.fulfill({ json: { artifacts: [] } });
+      const artifacts = state.artifacts || [];
+      await route.fulfill({ json: { data: artifacts, artifacts } });
       return;
     }
     if (url.pathname === "/api/threads") {
@@ -64,11 +65,18 @@ async function mockApi(page, state = {}) {
         await route.abort("failed");
         return;
       }
-      await route.fulfill({ json: { threads: [] } });
+      const threads = state.threads || [];
+      await route.fulfill({ json: { data: threads, threads } });
       return;
     }
     if (url.pathname === "/api/review") {
-      await route.fulfill({ json: { clean: true, files: [], totals: { additions: 0, deletions: 0 } } });
+      await route.fulfill({ json: state.review || { clean: true, files: [], totals: { additions: 0, deletions: 0 } } });
+      return;
+    }
+    if (url.pathname === "/api/file") {
+      const filePath = url.searchParams.get("path") || "";
+      const file = state.files?.[filePath] || { path: filePath, kind: "text", text: "" };
+      await route.fulfill({ json: file });
       return;
     }
     if (url.pathname === "/api/skills") {
@@ -203,6 +211,75 @@ test("background thread polling stays quiet after browser bridge disconnects", a
   const logText = await page.locator("#log").innerText();
   assert.doesNotMatch(logText, /thread一覧を読めませんでした: Failed to fetch/);
   assert.equal(await page.locator("#runState").getAttribute("data-state"), "disconnected");
+});
+
+test("mobile artifact preview stays open when launched from chat and panel rows", async (t) => {
+  const server = await startStaticServer();
+  let browser;
+  t.after(async () => {
+    if (browser) await browser.close();
+    await server.close();
+  });
+
+  browser = await chromium.launch();
+  const page = await browser.newPage({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 1 });
+  await mockApi(page, {
+    artifacts: [{ path: "README.md", name: "README.md", kind: "markdown" }],
+    files: {
+      "README.md": { path: "README.md", kind: "markdown", text: "# Artifact Preview\n\nRendered from a test artifact." },
+    },
+    review: {
+      clean: false,
+      files: [{ path: "README.md", status: "M", openable: true, additions: 1, deletions: 0 }],
+      totals: { additions: 1, deletions: 0 },
+    },
+  });
+  await mockWebSocket(page);
+  await page.goto(`${server.origin}/?token=${token}`, { waitUntil: "networkidle" });
+
+  await page.locator(".chat-artifact-card[data-open-artifact-path='README.md']").click();
+  await page.waitForSelector("#artifactPanel[aria-hidden='false']");
+  assert.equal(await page.locator("body").evaluate((body) => body.classList.contains("show-panel")), true);
+  await page.getByText("Rendered from a test artifact.").waitFor();
+
+  await page.locator("#artifactList .artifact-row").first().click();
+  await page.getByText("Rendered from a test artifact.").waitFor();
+  assert.equal(await page.locator("#artifactPanel").getAttribute("aria-hidden"), "false");
+  assert.equal(await page.locator("body").evaluate((body) => body.classList.contains("show-panel")), true);
+});
+
+test("artifact card click still lets other document click handlers close menus", async (t) => {
+  const server = await startStaticServer();
+  let browser;
+  t.after(async () => {
+    if (browser) await browser.close();
+    await server.close();
+  });
+
+  browser = await chromium.launch();
+  const page = await browser.newPage({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 1 });
+  await mockApi(page, {
+    artifacts: [{ path: "README.md", name: "README.md", kind: "markdown" }],
+    files: {
+      "README.md": { path: "README.md", kind: "markdown", text: "# Artifact Preview\n\nRendered from a test artifact." },
+    },
+    review: {
+      clean: false,
+      files: [{ path: "README.md", status: "M", openable: true, additions: 1, deletions: 0 }],
+      totals: { additions: 1, deletions: 0 },
+    },
+  });
+  await mockWebSocket(page);
+  await page.goto(`${server.origin}/?token=${token}`, { waitUntil: "networkidle" });
+  await page.waitForSelector("#send:not([disabled])");
+
+  await page.evaluate(() => toggleModelMenu());
+  await page.waitForFunction(() => !document.querySelector("#modelMenu")?.classList.contains("hidden"));
+  await page.locator(".chat-artifact-card[data-open-artifact-path='README.md']").click();
+
+  await page.getByText("Rendered from a test artifact.").waitFor();
+  assert.equal(await page.locator("#artifactPanel").getAttribute("aria-hidden"), "false");
+  assert.equal(await page.locator("#modelMenu").evaluate((node) => node.classList.contains("hidden")), true);
 });
 
 test("slash opens installed skill menu and inserts the selected command", async (t) => {

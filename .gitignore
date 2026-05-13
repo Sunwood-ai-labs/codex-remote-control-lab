@@ -11,3 +11,4 @@ docs/.vitepress/cache/
 .phone-rate-limits.json
 .phone-workspaces.json
 .uploads/
+tmp/
