@@ -244,8 +244,7 @@ function normalizeUiError(raw) {
   const problem = pickErrorPayload(raw);
   const detail = typeof problem === "string" ? problem : JSON.stringify(problem);
   const message = String(problem.message || problem.additionalDetails || raw || "Codex error");
-  const streamDisconnected =
-    Boolean(problem.codexErrorInfo?.responseStreamDisconnected) || /responseStreamDisconnected|response\.completed/i.test(detail);
+  const streamDisconnected = Boolean(problem.codexErrorInfo?.responseStreamDisconnected);
   const retrying = Boolean(problem.willRetry) || /^Reconnecting\.\.\./i.test(message);
   if (streamDisconnected && retrying) {
     return {
