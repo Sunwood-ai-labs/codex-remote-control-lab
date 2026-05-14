@@ -238,6 +238,7 @@ test("terminal mode is hidden until selected and uses native terminal viewport",
   assert.match(css, /\.session-create-footer \{/);
   assert.match(css, /\.session-switcher-overlay \{/);
   assert.match(css, /\.session-switcher-panel \{[\s\S]*width: min\(560px, 100%\);[\s\S]*font-family: inherit;/);
+  assert.match(css, /\.session-switcher-panel \{[\s\S]*box-shadow:[\s\S]*var\(--text\) 18%/);
   assert.match(css, /\.session-switcher-panel \.session-card \{[\s\S]*grid-template-columns: 28px minmax\(0, 1fr\);/);
   assert.match(css, /\.session-switcher-panel \.session-card-path,[\s\S]*\.session-switcher-panel \.session-card-meta \{[\s\S]*font-family: inherit;/);
   assert.match(css, /\.session-card-row \{/);
