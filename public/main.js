@@ -1,5 +1,7 @@
 const log = document.querySelector("#log");
 const meta = document.querySelector("#meta");
+const headerCwd = document.querySelector("#headerCwd");
+const pathbarColorPicker = document.querySelector("#pathbarColorPicker");
 const connectButton = document.querySelector("#connect");
 const newThreadButton = document.querySelector("#newThread");
 const searchButton = document.querySelector("#searchButton");
@@ -7,12 +9,33 @@ const pluginsButton = document.querySelector("#pluginsButton");
 const automationsButton = document.querySelector("#automationsButton");
 const settingsButton = document.querySelector("#settingsButton");
 const menuButton = document.querySelector("#menuButton");
+const modeButtons = document.querySelectorAll("[data-main-mode]");
+const terminalStatus = document.querySelector("#terminalStatus");
+const terminalSessionMeta = document.querySelector("#terminalSessionMeta");
+const terminalHost = document.querySelector("#terminalHost");
+const terminalFallback = document.querySelector("#terminalFallback");
+const terminalReconnect = document.querySelector("#terminalReconnect");
+const terminalThemeToggle = document.querySelector("#terminalThemeToggle");
+const terminalZoomOut = document.querySelector("#terminalZoomOut");
+const terminalZoomIn = document.querySelector("#terminalZoomIn");
+const terminalFontSizeLabel = document.querySelector("#terminalFontSizeLabel");
+const terminalInputArea = document.querySelector("#terminalInputArea");
+const terminalPrompt = document.querySelector("#terminalPrompt");
+const terminalSend = document.querySelector("#terminalSend");
+const terminalModeButtons = document.querySelectorAll("[data-terminal-input-mode]");
+const terminalPanels = document.querySelectorAll("[data-terminal-panel]");
+const terminalNativeInputButtons = document.querySelectorAll("[data-terminal-pty-input]");
+const terminalActionButtons = document.querySelectorAll("[data-terminal-action]");
+const terminalCtrlCButton = document.querySelector("[data-terminal-ctrl-c]");
+const terminalCtrlCConfirm = document.querySelector("#terminalCtrlCConfirm");
+const terminalCtrlCCancel = document.querySelector("#terminalCtrlCCancel");
+const terminalCtrlCConfirmButton = document.querySelector("#terminalCtrlCConfirmButton");
+const terminalFileInput = document.querySelector("#terminalFileInput");
 const closePanelButton = document.querySelector("#closePanelButton");
 const addButton = document.querySelector("#addButton");
 const accessButton = document.querySelector("#accessButton");
 const modelButton = document.querySelector("#modelButton");
 const modelMenu = document.querySelector("#modelMenu");
-const expandPromptButton = document.querySelector("#expandPromptButton");
 const voiceButton = document.querySelector("#voiceButton");
 const fileInput = document.querySelector("#fileInput");
 const attachments = document.querySelector("#attachments");
@@ -35,20 +58,26 @@ const runStateLabel = document.querySelector("#runStateLabel");
 const threadList = document.querySelector("#threadList");
 const threadSearch = document.querySelector("#threadSearch");
 const threadTitle = document.querySelector("#threadTitle");
+const sessionSwitcher = document.querySelector("#sessionSwitcher");
+const sessionCountPill = document.querySelector("#sessionCountPill");
+const sessionCreatePage = document.querySelector("#sessionCreatePage");
+const sessionCreateCancel = document.querySelector("#sessionCreateCancel");
+const sessionSelectedCwd = document.querySelector("#sessionSelectedCwd");
+const sessionRecentList = document.querySelector("#sessionRecentList");
+const sessionRecentClear = document.querySelector("#sessionRecentClear");
+const sessionBrowserUp = document.querySelector("#sessionBrowserUp");
+const sessionBrowserPath = document.querySelector("#sessionBrowserPath");
+const sessionBrowserList = document.querySelector("#sessionBrowserList");
+const sessionDirectorySearch = document.querySelector("#sessionDirectorySearch");
+const sessionStartButton = document.querySelector("#sessionStartButton");
+const sessionHiddenToggle = document.querySelector("#sessionHiddenToggle");
+const sessionSwitcherOverlay = document.querySelector("#sessionSwitcherOverlay");
+const sessionSwitcherClose = document.querySelector("#sessionSwitcherClose");
+const sessionSwitcherNew = document.querySelector("#sessionSwitcherNew");
+const openSessionList = document.querySelector("#openSessionList");
 const composer = document.querySelector("#composer");
 const promptInput = document.querySelector("#prompt");
-const promptModal = document.querySelector("#promptModal");
-const promptModalInput = document.querySelector("#promptModalInput");
-const closePromptModalButton = document.querySelector("#closePromptModalButton");
-const cancelPromptModalButton = document.querySelector("#cancelPromptModalButton");
-const applyPromptModalButton = document.querySelector("#applyPromptModalButton");
-const slashSuggestions = document.querySelector("#slashSuggestions");
 const sendButton = document.querySelector("#send");
-const interruptButton = document.querySelector("#interruptRun");
-const workspaceIndicator = document.querySelector("#workspaceIndicator");
-const workspaceRepo = document.querySelector("#workspaceRepo");
-const workspaceLocation = document.querySelector("#workspaceLocation");
-const branchName = document.querySelector("#branchName");
 const approval = document.querySelector("#approval");
 const approvalText = document.querySelector("#approvalText");
 const approveButton = document.querySelector("#approve");
@@ -58,9 +87,7 @@ const rightResizeHandle = document.querySelector("#rightResizeHandle");
 
 const params = new URLSearchParams(location.search);
 const token = params.get("token") || localStorage.getItem("codexPhoneToken") || "";
-let selectedThread = params.get("thread") || localStorage.getItem("codexPhoneLastThread") || "";
-let activeProvider = "codex";
-let threadProvider = params.get("provider") || "";
+let selectedThread = params.get("thread") || "";
 let tokenRequired = true;
 let authMode = "token";
 if (token) localStorage.setItem("codexPhoneToken", token);
@@ -69,6 +96,41 @@ if (params.has("token") && window.history?.replaceState) {
   cleanUrl.searchParams.delete("token");
   window.history.replaceState({}, document.title, cleanUrl);
 }
+
+const viewportMeta = document.querySelector('meta[name="viewport"]');
+const stableViewportContent = viewportMeta?.getAttribute("content") || "width=device-width, initial-scale=1, viewport-fit=cover";
+const resetViewportContent = stableViewportContent.includes("maximum-scale=1")
+  ? stableViewportContent
+  : `${stableViewportContent}, maximum-scale=1`;
+
+function isTextInputElement(element) {
+  if (!element) return false;
+  if (element.tagName === "TEXTAREA") return true;
+  if (element.tagName !== "INPUT") return false;
+  return !["button", "checkbox", "color", "file", "hidden", "image", "radio", "range", "reset", "submit"].includes(element.type);
+}
+
+function resetViewportScaleAfterInput() {
+  if (!viewportMeta || !window.visualViewport || window.visualViewport.scale <= 1.01) return;
+  // iOS Safari は入力後の拡大状態を戻せないことがあるため、短時間だけ最大倍率を固定してから正規設定へ戻す。
+  viewportMeta.setAttribute("content", resetViewportContent);
+  requestAnimationFrame(() => {
+    window.scrollTo(window.scrollX, window.scrollY);
+    setTimeout(() => viewportMeta.setAttribute("content", stableViewportContent), 260);
+  });
+}
+
+document.addEventListener(
+  "focusout",
+  (event) => {
+    if (isTextInputElement(event.target)) resetViewportScaleAfterInput();
+  },
+  true,
+);
+window.addEventListener("orientationchange", () => setTimeout(resetViewportScaleAfterInput, 280));
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible") resetViewportScaleAfterInput();
+});
 
 const themeOptions = [
   { id: "simple", name: "シンプル", detail: "静かなローカルコンソール" },
@@ -84,66 +146,55 @@ let assistantEntry = null;
 let statusGroup = null;
 let threadCache = [];
 let liveTurnActive = false;
+let remoteSessionState = null;
 let lastHistorySignature = "";
-let visibleHistoryThread = selectedThread;
-const maxThreadHistoryCacheSize = 50;
-const threadHistoryCache = new Map();
-const threadReadyNonce = new Map();
 let lastThreadListError = "";
 let lastThreadRefreshError = "";
 let selectedThreadRefreshActive = false;
 let selectedModel = localStorage.getItem("codexPhoneModel") || "";
 let selectedModelLabel = localStorage.getItem("codexPhoneModelLabel") || "5.5";
 let selectedReasoning = localStorage.getItem("codexPhoneReasoning") || "中";
+let activeMainMode = localStorage.getItem("codexMainMode") || "chat";
+let nativeTerminal = null;
+let terminalLongPressActive = false;
+const terminalFontSizes = [5, 6, 7, 8, 10, 12, 14, 16];
+let terminalFontSize = Number(localStorage.getItem("codexTerminalFontSize")) || 6;
+if (!terminalFontSizes.includes(terminalFontSize)) terminalFontSize = 6;
+let terminalThemeMode = localStorage.getItem("codexTerminalThemeMode") === "light" ? "light" : "dark";
+let terminalInputMode = localStorage.getItem("codexTerminalInputMode") === "keys" ? "keys" : "text";
+let terminalCopyFallbackDialog = null;
 let settingsRenderSeq = 0;
 let artifactItems = [];
 let activeArtifactPath = "";
-let suppressArtifactTouchClickUntil = 0;
 let activePanel = "artifacts";
 let currentWorkdir = "";
 let nextThreadCwd = "";
 let forceNewThreadOnce = false;
-let currentRunState = "connecting";
-let interruptRequestPending = false;
-let currentWorkspace = {
-  repoName: "",
-  workspaceLocation: "",
-  gitBranch: "",
-};
+const openSessionsStorageKey = "codexRemoteOpenSessions";
+const activeSessionStorageKey = "codexRemoteLastActiveSessionKey";
+const resumeSessionStorageKey = "codexRemoteResumeSession";
+const cwdHistoryStorageKey = "codexRemoteCwdHistory";
+const closedThreadIdsStorageKey = "codexRemoteClosedThreadIds";
+const maxCwdHistory = 8;
+let openSessions = readOpenSessions();
+let activeSessionKey = localStorage.getItem(activeSessionStorageKey) || "";
+let resumeCandidateSession = readResumeSession();
+let cwdHistory = readCwdHistory();
+let closedThreadIds = readClosedThreadIds();
+let sessionCreateCwd = localStorage.getItem("codexRemoteLastCwd") || "";
+let sessionBrowserCurrentPath = sessionCreateCwd || "";
+let sessionBrowserParentPath = "";
+let sessionShowHidden = false;
+let sessionBrowserEntries = [];
+const pathbarColorStorageKey = "codexPathbarColorsByCwd";
+const defaultPathbarColor = "#4f8cff";
+let pathbarColorsByCwd = readPathbarColors();
 let accessMode = {
   label: "フルアクセス",
   approvalPolicy: "never",
   sandboxMode: "danger-full-access",
 };
 let pendingFiles = [];
-let lastReviewDigestSignature = "";
-let slashSkillMenu = null;
-let slashSkills = [];
-let slashSkillsLoaded = false;
-let slashSkillsPromise = null;
-let slashActiveIndex = 0;
-let activeSlashMatch = null;
-let slashCommandsCache = [];
-
-function normalizeProviderName(provider) {
-  const value = String(provider || "").trim().toLowerCase();
-  if (value === "codex" || value === "claude") return value;
-  return "";
-}
-
-function providerLabel(provider) {
-  return provider === "claude" ? "Claude" : "Codex";
-}
-
-function currentThreadProvider() {
-  return normalizeProviderName(threadProvider || activeProvider) || "codex";
-}
-
-function setActiveProvider(provider) {
-  activeProvider = normalizeProviderName(provider) || "codex";
-  if (!threadProvider) threadProvider = activeProvider;
-  document.documentElement.dataset.provider = activeProvider;
-}
 
 const panelWidthConfig = {
   left: { min: 188, max: 360, fallback: 232, storageKey: "codexLeftSidebarWidth", cssVar: "--thread-width" },
@@ -155,125 +206,55 @@ const runStateText = {
   ready: "待機中",
   running: "Codex 処理中",
   streaming: "回答生成中",
-  reconnecting: "再接続中",
   approval: "承認待ち",
-  interrupting: "中断中",
-  interrupted: "中断しました",
   syncing: "履歴同期中",
   done: "完了",
   disconnected: "切断",
   error: "エラー",
 };
-const interruptibleRunStates = new Set(["running", "streaming", "approval", "interrupting"]);
-const terminalRunStates = new Set(["ready", "done", "interrupted", "disconnected", "error"]);
 
-function updateInterruptButton() {
-  if (!interruptButton) return;
-  const visible = interruptibleRunStates.has(currentRunState);
-  const disabled =
-    !visible || currentRunState === "interrupting" || interruptRequestPending || !ws || ws.readyState !== WebSocket.OPEN;
-  let label = "現在の処理を中断";
-  if (visible && (currentRunState === "interrupting" || interruptRequestPending)) label = "中断要求を送信中です";
-  else if (visible && (!ws || ws.readyState !== WebSocket.OPEN)) label = "接続後に処理を中断";
-  interruptButton.classList.toggle("hidden", !visible);
-  interruptButton.disabled = disabled;
-  interruptButton.title = label;
-  interruptButton.setAttribute("aria-label", label);
+function isRemoteSessionRunning() {
+  return remoteSessionState?.status === "running";
 }
 
 function setRunState(state, label) {
   if (!runState || !runStateLabel) return;
   const nextLabel = label || runStateText[state] || state;
-  currentRunState = state;
-  if (terminalRunStates.has(state)) interruptRequestPending = false;
-  if (state !== "approval" && pendingApproval) {
-    pendingApproval = null;
-    approval.classList.add("hidden");
-  }
-  if (runState.dataset.state !== state || runStateLabel.textContent !== nextLabel) {
-    runState.dataset.state = state;
-    runStateLabel.textContent = nextLabel;
-  }
-  updateInterruptButton();
+  if (runState.dataset.state === state && runStateLabel.textContent === nextLabel) return;
+  runState.dataset.state = state;
+  runStateLabel.textContent = nextLabel;
 }
 
-function compactWorkspaceLocation(location) {
-  const value = String(location || ".").replace(/\\/g, "/");
-  if (value === "." || value === "~") return value;
-  const prefix = value.startsWith("~/") ? "~/" : value.startsWith("/") ? "/" : "";
-  const body = prefix ? value.slice(prefix.length) : value;
-  const parts = body.split("/").filter(Boolean);
-  if (parts.length <= 2) return value;
-  return `${prefix}.../${parts.slice(-2).join("/")}`;
-}
-
-function setWorkspaceMeta(payload = {}) {
-  const repoName = String(payload.repoName || currentWorkspace.repoName || "").trim();
-  const location = String(payload.workspaceLocation || currentWorkspace.workspaceLocation || "").trim();
-  const branch = String(payload.gitBranch || payload.branch || currentWorkspace.gitBranch || "").trim();
-  currentWorkspace = { repoName, workspaceLocation: location, gitBranch: branch };
-  if (!workspaceIndicator || !workspaceRepo || !workspaceLocation || !branchName) return;
-  const hasMeta = Boolean(repoName || location || branch);
-  workspaceIndicator.classList.toggle("empty", !hasMeta);
-  workspaceRepo.textContent = repoName || "リポジトリ";
-  workspaceRepo.title = repoName || "";
-  workspaceLocation.textContent = compactWorkspaceLocation(location || ".");
-  workspaceLocation.title = location || ".";
-  branchName.textContent = branch || "不明";
-  branchName.title = branch || "";
-  workspaceIndicator.setAttribute(
-    "aria-label",
-    `現在のワークスペース: ${repoName || "不明"} ${location || "."} ${branch || "不明"}`,
-  );
-}
-
-function parseMaybeJson(value) {
-  if (typeof value !== "string") return value;
-  const trimmed = value.trim();
-  if (!trimmed.startsWith("{") && !trimmed.startsWith("[")) return value;
-  try {
-    return JSON.parse(trimmed);
-  } catch {
-    return value;
+function applyRemoteSessionState(state) {
+  if (!state || typeof state !== "object") return;
+  remoteSessionState = state;
+  if (activeSessionKey) {
+    const active = openSessions.find((session) => session.key === activeSessionKey);
+    if (active) {
+      active.status = state.status || active.status;
+      active.updatedAt = Date.now();
+      persistOpenSessions();
+      renderSessionChrome();
+    }
   }
-}
-
-function pickErrorPayload(raw) {
-  const value = parseMaybeJson(raw);
-  if (!value || typeof value !== "object") return { message: String(raw || "Codex error") };
-  if (value.error) return value.error;
-  if (value.params?.error) return value.params.error;
-  return value;
-}
-
-function normalizeUiError(raw) {
-  const problem = pickErrorPayload(raw);
-  const detail = typeof problem === "string" ? problem : JSON.stringify(problem);
-  const message = String(problem.message || problem.additionalDetails || raw || "Codex error");
-  const streamDisconnected = Boolean(problem.codexErrorInfo?.responseStreamDisconnected);
-  const retrying = Boolean(problem.willRetry) || /^Reconnecting\.\.\./i.test(message);
-  if (streamDisconnected && retrying) {
-    return {
-      state: "reconnecting",
-      kind: "status",
-      text: `Codex応答ストリームが一時切断されました。再接続中です。${message ? ` (${message})` : ""}`,
-      detail,
-    };
+  syncTerminalSessionMeta();
+  if (state.status === "running") {
+    liveTurnActive = true;
+    setRunState("running", state.label || "Codex 処理中");
+    return;
   }
-  if (streamDisconnected) {
-    return {
-      state: "error",
-      kind: "error",
-      text: "Codex応答ストリームが切断されました。再接続後にもう一度送信してください。",
-      detail,
-    };
+  if (state.status === "awaiting_approval") {
+    liveTurnActive = true;
+    setRunState("approval", state.label || "承認待ち");
+    return;
   }
-  return {
-    state: "error",
-    kind: "error",
-    text: message,
-    detail,
-  };
+  if (state.status === "input_ready" || state.status === "completed") {
+    liveTurnActive = false;
+    assistantEntry = null;
+    setRunState("done", state.label || "入力待ち");
+    loadThreads();
+    refreshSelectedThread();
+  }
 }
 
 function applyTheme(themeId) {
@@ -284,6 +265,416 @@ function applyTheme(themeId) {
 }
 
 applyTheme(selectedTheme);
+
+function isHexColor(value) {
+  return /^#[0-9a-f]{6}$/i.test(String(value || ""));
+}
+
+function readPathbarColors() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(pathbarColorStorageKey) || "{}");
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function pathbarColorKeyFor(cwd = currentWorkdir) {
+  return cwd || "__default__";
+}
+
+function pathbarColorFor(cwd = currentWorkdir) {
+  const saved = pathbarColorsByCwd[pathbarColorKeyFor(cwd)] || pathbarColorsByCwd.__default__;
+  return isHexColor(saved) ? saved : defaultPathbarColor;
+}
+
+function applyPathbarColor(color = pathbarColorFor()) {
+  const nextColor = isHexColor(color) ? color : defaultPathbarColor;
+  document.documentElement.style.setProperty("--pathbar-color", nextColor);
+  if (pathbarColorPicker) pathbarColorPicker.value = nextColor;
+}
+
+function savePathbarColorForCurrentWorkdir(color) {
+  if (!isHexColor(color)) return;
+  pathbarColorsByCwd[pathbarColorKeyFor()] = color;
+  localStorage.setItem(pathbarColorStorageKey, JSON.stringify(pathbarColorsByCwd));
+  applyPathbarColor(color);
+}
+
+applyPathbarColor();
+
+function readJsonObjectArray(storageKey) {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(storageKey) || "[]");
+    return Array.isArray(parsed) ? parsed.filter((item) => item && typeof item === "object") : [];
+  } catch {
+    return [];
+  }
+}
+
+function readOpenSessions() {
+  return readJsonObjectArray(openSessionsStorageKey)
+    .map((item) => normalizeOpenSession(item))
+    .filter(Boolean);
+}
+
+function readResumeSession() {
+  try {
+    return normalizeOpenSession(JSON.parse(localStorage.getItem(resumeSessionStorageKey) || "null"));
+  } catch {
+    return null;
+  }
+}
+
+function readCwdHistory() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(cwdHistoryStorageKey) || "[]");
+    return Array.isArray(parsed) ? parsed.filter((item) => typeof item === "string").slice(0, maxCwdHistory) : [];
+  } catch {
+    return [];
+  }
+}
+
+function readClosedThreadIds() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(closedThreadIdsStorageKey) || "[]");
+    return new Set(Array.isArray(parsed) ? parsed.filter((item) => typeof item === "string") : []);
+  } catch {
+    return new Set();
+  }
+}
+
+function persistClosedThreadIds() {
+  localStorage.setItem(closedThreadIdsStorageKey, JSON.stringify(Array.from(closedThreadIds)));
+}
+
+function rememberClosedThread(threadId) {
+  const id = String(threadId || "");
+  if (!id) return;
+  closedThreadIds.add(id);
+  persistClosedThreadIds();
+}
+
+function forgetClosedThread(threadId) {
+  const id = String(threadId || "");
+  if (!id || !closedThreadIds.delete(id)) return;
+  persistClosedThreadIds();
+}
+
+function sessionKeyFor(threadId = "", cwd = "") {
+  return `${threadId || "new"}::${cwd || ""}`;
+}
+
+function normalizeOpenSession(item) {
+  if (!item || typeof item !== "object") return null;
+  const threadId = String(item.threadId || "");
+  const cwd = String(item.cwd || "");
+  if (!threadId && !cwd) return null;
+  return {
+    key: String(item.key || sessionKeyFor(threadId, cwd)),
+    threadId,
+    cwd,
+    title: String(item.title || threadId || cwd || "New session"),
+    status: String(item.status || "ready"),
+    updatedAt: Number(item.updatedAt || Date.now()),
+  };
+}
+
+function persistOpenSessions() {
+  localStorage.setItem(openSessionsStorageKey, JSON.stringify(openSessions));
+  if (activeSessionKey) localStorage.setItem(activeSessionStorageKey, activeSessionKey);
+  else localStorage.removeItem(activeSessionStorageKey);
+}
+
+function persistResumeSession(session) {
+  const normalized = normalizeOpenSession(session);
+  if (!normalized?.threadId) return;
+  resumeCandidateSession = normalized;
+  localStorage.setItem(resumeSessionStorageKey, JSON.stringify(normalized));
+}
+
+function pushCwdHistory(cwd) {
+  const nextCwd = String(cwd || "").trim();
+  if (!nextCwd) return;
+  cwdHistory = [nextCwd, ...cwdHistory.filter((item) => item !== nextCwd)].slice(0, maxCwdHistory);
+  localStorage.setItem(cwdHistoryStorageKey, JSON.stringify(cwdHistory));
+  localStorage.setItem("codexRemoteLastCwd", nextCwd);
+}
+
+function shortSessionPath(cwd) {
+  const display = displayPath(cwd);
+  const parts = String(display || "").split("/").filter(Boolean);
+  if (parts.length <= 2) return display || "cwd未設定";
+  return `.../${parts.slice(-2).join("/")}`;
+}
+
+function basenameForPath(cwd) {
+  const trimmed = String(cwd || "").replace(/\/+$/, "");
+  const parts = trimmed.split("/").filter(Boolean);
+  return parts.at(-1) || trimmed || "New session";
+}
+
+function homeDirectoryForPath(value) {
+  const text = String(value || "");
+  const match = text.match(/^\/Users\/[^/]+(?=\/|$)/) || text.match(/^\/home\/[^/]+(?=\/|$)/);
+  return match?.[0] || "";
+}
+
+function displayPath(value) {
+  const text = String(value || "");
+  const home = homeDirectoryForPath(text);
+  if (!home) return text;
+  return text === home ? "~" : `~${text.slice(home.length)}`;
+}
+
+function defaultDeveloperPath() {
+  const candidates = [sessionCreateCwd, sessionBrowserCurrentPath, currentWorkdir, ...cwdHistory].filter(Boolean);
+  for (const candidate of candidates) {
+    const text = String(candidate);
+    const marker = "/Developer";
+    const index = text.indexOf(marker);
+    if (index >= 0) return text.slice(0, index + marker.length);
+  }
+  return "";
+}
+
+function addOrUpdateOpenSession(input) {
+  const session = normalizeOpenSession({
+    ...input,
+    key: sessionKeyFor(input.threadId, input.cwd),
+    title: input.title || basenameForPath(input.cwd) || input.threadId,
+    updatedAt: Date.now(),
+  });
+  if (!session) return null;
+  forgetClosedThread(session.threadId);
+  const index = openSessions.findIndex((item) => item.key === session.key);
+  if (index >= 0) openSessions[index] = { ...openSessions[index], ...session };
+  else openSessions.push(session);
+  activeSessionKey = session.key;
+  persistResumeSession(session);
+  persistOpenSessions();
+  renderSessionChrome();
+  return session;
+}
+
+function syncOpenSessionsFromThreads() {
+  const liveIds = new Set(threadCache.map((thread) => thread.id).filter(Boolean));
+  const previousActive =
+    openSessions.find((session) => session.key === activeSessionKey && session.threadId) || resumeCandidateSession || readResumeSession();
+  const known = new Map(openSessions.map((item) => [item.threadId, item]));
+  for (const thread of threadCache) {
+    if (!thread.id) continue;
+    if (closedThreadIds.has(thread.id) && thread.id !== selectedThread) continue;
+    const existing = known.get(thread.id);
+    if (existing) {
+      existing.cwd = thread.cwd || existing.cwd;
+      existing.title = titleForThread(thread);
+      existing.status = thread.status || thread.sessionState?.status || existing.status || "ready";
+      existing.updatedAt = thread.updatedAt || thread.createdAt || Date.now();
+      continue;
+    }
+    openSessions.push(
+      normalizeOpenSession({
+        threadId: thread.id,
+        cwd: thread.cwd || "",
+        title: titleForThread(thread),
+        status: thread.status || thread.sessionState?.status || "ready",
+        updatedAt: thread.updatedAt || thread.createdAt || Date.now(),
+      }),
+    );
+  }
+  openSessions = openSessions
+    .filter((session) => session && (!session.threadId || (liveIds.has(session.threadId) && !closedThreadIds.has(session.threadId))))
+    .sort((a, b) => a.updatedAt - b.updatedAt);
+  if (previousActive?.threadId && !liveIds.has(previousActive.threadId)) persistResumeSession(previousActive);
+  if (selectedThread && !liveIds.has(selectedThread)) {
+    persistResumeSession({
+      threadId: selectedThread,
+      cwd: currentWorkdir || previousActive?.cwd || resumeCandidateSession?.cwd || "",
+      title: previousActive?.title || selectedThread,
+      status: "resume_pending",
+    });
+  }
+  if (!activeSessionKey && openSessions.length) activeSessionKey = openSessions[0].key;
+  if (
+    activeSessionKey &&
+    !openSessions.some((session) => session.key === activeSessionKey) &&
+    resumeCandidateSession?.key !== activeSessionKey
+  ) {
+    activeSessionKey = "";
+  }
+  persistOpenSessions();
+  renderSessionChrome();
+}
+
+function activeSessionIndex() {
+  return openSessions.findIndex((session) => session.key === activeSessionKey);
+}
+
+function switchToOpenSession(sessionKey) {
+  const session = openSessions.find((item) => item.key === sessionKey);
+  if (!session) return false;
+  activeSessionKey = session.key;
+  persistOpenSessions();
+  selectedThread = session.threadId || "";
+  currentWorkdir = session.cwd || currentWorkdir;
+  updateUrlThread();
+  renderSessionChrome();
+  connect();
+  return true;
+}
+
+function switchOpenSessionByOffset(offset) {
+  if (openSessions.length < 2) return false;
+  const current = Math.max(0, activeSessionIndex());
+  const next = current + offset;
+  if (next < 0 || next >= openSessions.length) return false;
+  return switchToOpenSession(openSessions[next].key);
+}
+
+function removeOpenSession(sessionKey) {
+  const index = openSessions.findIndex((session) => session.key === sessionKey);
+  if (index < 0) return;
+  const [removed] = openSessions.splice(index, 1);
+  rememberClosedThread(removed?.threadId);
+  if (removed?.threadId === selectedThread) {
+    const neighbor = openSessions[index] || openSessions[Math.max(0, index - 1)] || null;
+    activeSessionKey = neighbor?.key || "";
+    selectedThread = neighbor?.threadId || "";
+    currentWorkdir = neighbor?.cwd || currentWorkdir;
+    updateUrlThread();
+    if (neighbor) connect();
+    else renderHistory([]);
+  }
+  persistOpenSessions();
+  renderSessionChrome();
+  renderOpenSessionList();
+}
+
+function renderSessionChrome() {
+  const index = activeSessionIndex();
+  if (sessionCountPill) sessionCountPill.textContent = openSessions.length ? `${Math.max(0, index) + 1}/${openSessions.length}` : "0/0";
+  renderOpenSessionList();
+}
+
+function renderOpenSessionList() {
+  if (!openSessionList) return;
+  openSessionList.replaceChildren();
+  if (!openSessions.length) {
+    const empty = document.createElement("div");
+    empty.className = "session-empty";
+    empty.textContent = "開いているセッションはありません。";
+    openSessionList.appendChild(empty);
+    return;
+  }
+  for (const session of openSessions) {
+    const row = document.createElement("div");
+    row.className = session.key === activeSessionKey ? "session-card-row active" : "session-card-row";
+    const card = document.createElement("button");
+    card.type = "button";
+    card.className = "session-card";
+    card.innerHTML = `
+      <span class="session-card-title">${escapeHtml(session.title || basenameForPath(session.cwd))}</span>
+      <span class="session-card-path">${escapeHtml(displayPath(session.cwd) || "cwd未設定")}</span>
+      <span class="session-card-meta">${escapeHtml(session.status || "ready")} · ${escapeHtml(shortSessionPath(session.cwd))}</span>
+    `;
+    const close = document.createElement("button");
+    close.type = "button";
+    close.className = "session-card-close";
+    close.setAttribute("aria-label", `${session.title || session.threadId} を閉じる`);
+    close.textContent = "×";
+    card.addEventListener("click", () => {
+      closeSessionSwitcher();
+      switchToOpenSession(session.key);
+    });
+    close.addEventListener("click", () => removeOpenSession(session.key));
+    row.append(card, close);
+    openSessionList.appendChild(row);
+  }
+}
+
+function openSessionSwitcher() {
+  renderOpenSessionList();
+  sessionSwitcherOverlay?.classList.remove("hidden");
+}
+
+function closeSessionSwitcher() {
+  sessionSwitcherOverlay?.classList.add("hidden");
+}
+
+function restoreActiveSessionFromStorage() {
+  if (selectedThread) return true;
+  const liveIds = new Set(threadCache.map((thread) => thread.id).filter(Boolean));
+  const saved =
+    openSessions.find((session) => session.key === activeSessionKey && liveIds.has(session.threadId)) ||
+    openSessions.find((session) => liveIds.has(session.threadId)) ||
+    resumeCandidateSession ||
+    readResumeSession() ||
+    null;
+  if (!saved) return false;
+  activeSessionKey = saved.key;
+  selectedThread = saved.threadId || "";
+  currentWorkdir = saved.cwd || currentWorkdir;
+  updateUrlThread();
+  renderSessionChrome();
+  return Boolean(selectedThread);
+}
+
+function setMainMode(mode) {
+  const nextMode = mode === "terminal" ? "terminal" : "chat";
+  activeMainMode = nextMode;
+  document.body.dataset.mainMode = nextMode;
+  localStorage.setItem("codexMainMode", nextMode);
+  for (const button of modeButtons) {
+    const active = button.dataset.mainMode === nextMode;
+    button.classList.toggle("active", active);
+    button.setAttribute("aria-pressed", String(active));
+  }
+  if (nextMode === "terminal") {
+    syncTerminalSessionMeta();
+    ensureNativeTerminalConnected();
+  }
+}
+
+function applyTerminalTheme() {
+  if (terminalThemeMode === "light") document.body.dataset.terminalMode = "light";
+  else delete document.body.dataset.terminalMode;
+  if (terminalThemeToggle) {
+    terminalThemeToggle.textContent = terminalThemeMode === "light" ? "☀️" : "🌙";
+    terminalThemeToggle.setAttribute(
+      "aria-label",
+      terminalThemeMode === "light" ? "ダークターミナルへ切り替え" : "ライトターミナルへ切り替え",
+    );
+  }
+  nativeTerminal?.setThemeMode?.(terminalThemeMode);
+}
+
+function applyTerminalFontSize() {
+  if (terminalFontSizeLabel) terminalFontSizeLabel.textContent = String(terminalFontSize);
+  const index = terminalFontSizes.indexOf(terminalFontSize);
+  if (terminalZoomOut) {
+    terminalZoomOut.disabled = index <= 0;
+    terminalZoomOut.classList.toggle("disabled", index <= 0);
+  }
+  if (terminalZoomIn) {
+    terminalZoomIn.disabled = index >= terminalFontSizes.length - 1;
+    terminalZoomIn.classList.toggle("disabled", index >= terminalFontSizes.length - 1);
+  }
+  nativeTerminal?.setFontSize?.(terminalFontSize);
+}
+
+function setTerminalInputMode(mode) {
+  terminalInputMode = mode === "keys" ? "keys" : "text";
+  localStorage.setItem("codexTerminalInputMode", terminalInputMode);
+  for (const button of terminalModeButtons) {
+    const active = button.dataset.terminalInputMode === terminalInputMode;
+    button.classList.toggle("active", active);
+    button.setAttribute("aria-pressed", String(active));
+  }
+  for (const panel of terminalPanels) {
+    panel.classList.toggle("hidden", panel.dataset.terminalPanel !== terminalInputMode);
+  }
+}
 
 const accessModes = [
   { label: "フルアクセス", approvalPolicy: "never", sandboxMode: "danger-full-access" },
@@ -316,12 +707,9 @@ function setAccessButtonLabel() {
 }
 
 function updateModelButton() {
-  const showReasoning = activeProvider === "codex";
-  const label = showReasoning ? `${selectedModelLabel} ${selectedReasoning}` : selectedModelLabel;
-  modelButton.innerHTML = `<span class="model-button-label">${escapeHtml(label)}</span>${fontAwesomeIcon("chevronDown", "button-chevron-icon")}`;
-  modelButton.setAttribute("aria-label", showReasoning ? `モデル ${selectedModelLabel}、インテリジェンス ${selectedReasoning}` : `モデル ${selectedModelLabel}`);
+  modelButton.innerHTML = `<span class="model-button-label">${escapeHtml(`${selectedModelLabel} ${selectedReasoning}`)}</span>${fontAwesomeIcon("chevronDown", "button-chevron-icon")}`;
+  modelButton.setAttribute("aria-label", `モデル ${selectedModelLabel}、インテリジェンス ${selectedReasoning}`);
   for (const row of modelMenu.querySelectorAll("[data-reasoning]")) {
-    row.hidden = !showReasoning;
     const active = row.dataset.reasoning === selectedReasoning;
     row.classList.toggle("active", active);
     row.setAttribute("aria-checked", String(active));
@@ -336,7 +724,6 @@ function updateModelButton() {
     }
   }
   for (const row of modelMenu.querySelectorAll("[data-model-choice]")) {
-    row.hidden = activeProvider !== "codex";
     const active = row.dataset.modelChoice === selectedModel;
     row.classList.toggle("active", active);
     row.setAttribute("aria-checked", String(active));
@@ -355,36 +742,6 @@ function toggleModelMenu() {
   modelButton.setAttribute("aria-expanded", expanded);
 }
 
-function normalizeRateLimitWindows(rateLimits) {
-  const rawWindows = Array.isArray(rateLimits) ? rateLimits : rateLimits?.windows || rateLimits?.limits || [];
-  return rawWindows
-    .map((item) => {
-      const remainingPercent = Number(item.remainingPercent ?? item.remaining ?? item.percent);
-      const label = String(item.label || item.window || item.name || "").trim();
-      const resetsAt = String(item.resetsAt || item.resetAt || item.reset || "").trim();
-      if (!label && !Number.isFinite(remainingPercent) && !resetsAt) return null;
-      return {
-        label: label || "制限",
-        remainingPercent: Number.isFinite(remainingPercent) ? Math.max(0, Math.min(100, Math.round(remainingPercent))) : null,
-        resetsAt,
-      };
-    })
-    .filter(Boolean);
-}
-
-function addRateLimitPanelRows(rateLimits) {
-  const windows = normalizeRateLimitWindows(rateLimits);
-  if (!windows.length) {
-    const detail = rateLimits?.error ? "取得エラー" : rateLimits?.source === "unavailable" ? "取得元未設定" : "未取得";
-    addPanelRow("レート制限", detail);
-    return;
-  }
-  for (const item of windows) {
-    const percent = item.remainingPercent === null ? "--" : `${item.remainingPercent}%`;
-    addPanelRow(`レート制限 ${item.label}`, item.resetsAt ? `${percent} / ${item.resetsAt}` : percent);
-  }
-}
-
 function selectReasoning(value) {
   selectedReasoning = value;
   localStorage.setItem("codexPhoneReasoning", value);
@@ -395,8 +752,7 @@ function selectReasoning(value) {
 
 function selectModel(model) {
   selectedModel = model;
-  selectedModelLabel = model.replace(/^gpt-/i, "").replace(/^claude-/i, "");
-  if (activeProvider === "codex") selectedModelLabel = selectedModelLabel.toUpperCase();
+  selectedModelLabel = model.replace(/^gpt-/, "").toUpperCase().replace(/^GPT-/, "");
   if (selectedModelLabel.startsWith("5.")) selectedModelLabel = selectedModelLabel;
   localStorage.setItem("codexPhoneModel", selectedModel);
   localStorage.setItem("codexPhoneModelLabel", selectedModelLabel);
@@ -766,118 +1122,10 @@ function renderImageGallery(images = []) {
   return gallery;
 }
 
-function fileKindLabel(kind) {
-  if (kind === "markdown") return "ドキュメント・MD";
-  if (kind === "image") return "画像";
-  return "ファイル";
-}
-
 function diffStatLabel(file) {
   const additions = Number(file.additions || 0);
   const deletions = Number(file.deletions || 0);
   return `<span class="diff-add">+${additions}</span><span class="diff-del">-${deletions}</span>`;
-}
-
-function shouldDisplayReviewFile(file) {
-  return Boolean(file?.path && (file.openable || Number(file.additions || 0) || Number(file.deletions || 0)));
-}
-
-function renderReviewDigest(result) {
-  const files = (result?.files || []).filter(shouldDisplayReviewFile);
-  if (!result || result.clean || !files.length) return null;
-  const openableFiles = files.filter((file) => file.openable).slice(0, 6);
-  const totalFiles = files.length;
-  const totals =
-    result.totals && files.length === result.files?.length
-      ? result.totals
-      : files.reduce(
-          (sum, file) => ({
-            additions: sum.additions + Number(file.additions || 0),
-            deletions: sum.deletions + Number(file.deletions || 0),
-          }),
-          { additions: 0, deletions: 0 },
-        );
-  const sourceLabel = result.source === "latest commit" ? "最新commit" : "作業ツリー";
-  const wrap = document.createElement("section");
-  wrap.className = "review-digest";
-  wrap.innerHTML = `
-    <details class="review-reference-toggle">
-      <summary>${totalFiles}件の変更ファイル・${sourceLabel}</summary>
-    </details>
-    <div class="artifact-card-list"></div>
-    <div class="diff-card">
-      <div class="diff-card-header">
-        <strong>${totalFiles}個のファイルが変更されました</strong>
-        <span>${diffStatLabel({ additions: totals.additions, deletions: totals.deletions })}</span>
-      </div>
-      <div class="diff-file-list"></div>
-    </div>
-  `;
-  const citation = wrap.querySelector(".review-reference-toggle");
-  citation.dataset.reviewDigest = "true";
-  const artifactListNode = wrap.querySelector(".artifact-card-list");
-  for (const file of openableFiles) {
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = "chat-artifact-card";
-    button.dataset.openArtifactPath = file.path;
-    button.innerHTML = `
-      <span class="chat-artifact-icon" aria-hidden="true">${file.kind === "image" ? "IMG" : "DOC"}</span>
-      <span class="chat-artifact-copy">
-        <strong>${escapeHtml(file.path.split(/[\\/]/).pop() || file.path)}</strong>
-        <small>${escapeHtml(fileKindLabel(file.kind))}</small>
-      </span>
-      <span class="chat-artifact-open">開く</span>
-    `;
-    bindArtifactOpenTrigger(button);
-    artifactListNode.appendChild(button);
-  }
-  if (!openableFiles.length) artifactListNode.remove();
-
-  const diffList = wrap.querySelector(".diff-file-list");
-  for (const file of files.slice(0, 12)) {
-    const row = document.createElement("button");
-    row.type = "button";
-    row.className = "diff-file-row";
-    if (file.openable) row.dataset.openArtifactPath = file.path;
-    row.innerHTML = `
-      <span class="diff-file-name">${escapeHtml(file.path)}</span>
-      <span class="diff-file-stat">${diffStatLabel(file)}</span>
-      <span class="diff-file-chevron" aria-hidden="true">⌄</span>
-    `;
-    if (file.openable) bindArtifactOpenTrigger(row);
-    diffList.appendChild(row);
-  }
-  return wrap;
-}
-
-async function appendReviewDigest() {
-  if (tokenRequired && !token) return;
-  try {
-    const result = await apiGet("/api/review");
-    const signature = JSON.stringify({
-      branch: result.branch,
-      files: (result.files || []).map((file) => [file.status, file.path, file.additions, file.deletions]),
-    });
-    const existingDigests = Array.from(log.querySelectorAll(".review-digest-entry"));
-    if (signature === lastReviewDigestSignature && existingDigests.length) return;
-    lastReviewDigestSignature = signature;
-    const digest = renderReviewDigest(result);
-    for (const existing of existingDigests) existing.remove();
-    if (!digest) return;
-    const el = document.createElement("article");
-    el.className = "entry assistant review-digest-entry";
-    const body = document.createElement("div");
-    body.className = "entry-body";
-    body.appendChild(digest);
-    const tools = document.createElement("div");
-    tools.className = "entry-tools";
-    el.append(body, tools);
-    log.appendChild(el);
-    log.scrollTop = log.scrollHeight;
-  } catch (error) {
-    addStatus(`差分サマリーを更新できませんでした: ${error.message}`);
-  }
 }
 
 function summarizeStatus(items) {
@@ -976,58 +1224,15 @@ function addStatus(text) {
   addStatusGroupItem(text);
 }
 
-function isNetworkDisconnectMessage(message) {
-  return /Failed to fetch|NetworkError|Load failed|Couldn'?t connect|Connection refused/i.test(String(message || ""));
-}
-
-function shouldSuppressBackgroundFetchError(message) {
-  return isNetworkDisconnectMessage(message) && (!ws || ws.readyState !== WebSocket.OPEN);
-}
-
 function setReady(ready) {
   sendButton.disabled = !ready;
   promptInput.disabled = !ready;
-  updateInterruptButton();
-}
-
-function showPendingApproval(approvalRequest) {
-  const request = approvalRequest || {};
-  pendingApproval = request;
-  setRunState("approval");
-  approvalText.textContent = JSON.stringify(request.params || {}, null, 2);
-  approval.classList.remove("hidden");
 }
 
 function renderHistory(history) {
   log.replaceChildren();
   statusGroup = null;
   for (const entry of history || []) addEntry(entry.type, entry.text, entry.attachments || []);
-}
-
-function cloneHistory(history = []) {
-  if (typeof structuredClone === "function") return structuredClone(history);
-  return JSON.parse(JSON.stringify(history || []));
-}
-
-function pruneThreadCaches() {
-  while (threadHistoryCache.size > maxThreadHistoryCacheSize) {
-    const oldestThreadId = threadHistoryCache.keys().next().value;
-    threadHistoryCache.delete(oldestThreadId);
-    threadReadyNonce.delete(oldestThreadId);
-  }
-}
-
-function rememberThreadHistory(threadId, history) {
-  if (!threadId) return;
-  threadHistoryCache.delete(threadId);
-  threadHistoryCache.set(threadId, cloneHistory(history));
-  pruneThreadCaches();
-}
-
-function incrementThreadReadyNonce(threadId) {
-  if (!threadId) return;
-  threadReadyNonce.set(threadId, (threadReadyNonce.get(threadId) || 0) + 1);
-  pruneThreadCaches();
 }
 
 function historySignature(history = []) {
@@ -1040,25 +1245,12 @@ function historySignature(history = []) {
   );
 }
 
-function renderHistoryIfChanged(history = [], { threadId = selectedThread, cache = true } = {}) {
+function renderHistoryIfChanged(history = []) {
   const signature = historySignature(history);
-  if (cache) rememberThreadHistory(threadId, history);
-  if (signature === lastHistorySignature && visibleHistoryThread === threadId) return false;
+  if (signature === lastHistorySignature) return false;
   lastHistorySignature = signature;
-  visibleHistoryThread = threadId;
   renderHistory(history);
-  appendReviewDigest();
   return true;
-}
-
-function prepareThreadHistoryForConnect(threadId) {
-  if (!threadId) {
-    renderHistoryIfChanged([], { threadId: "", cache: false });
-    return;
-  }
-  const cachedHistory = threadHistoryCache.get(threadId);
-  if (cachedHistory) renderHistoryIfChanged(cachedHistory, { threadId, cache: false });
-  else renderHistoryIfChanged([{ type: "assistant", text: "thread履歴を読み込み中..." }], { threadId, cache: false });
 }
 
 function renderThreadList() {
@@ -1067,7 +1259,7 @@ function renderThreadList() {
   const newProject = document.createElement("button");
   newProject.type = "button";
   newProject.className = selectedThread ? "project-heading new-project" : "project-heading new-project active";
-  newProject.innerHTML = `${fontAwesomeIcon("folderPlus", "project-icon")}<span>New ${providerLabel(currentThreadProvider())} thread</span>`;
+  newProject.innerHTML = `${fontAwesomeIcon("folderPlus", "project-icon")}<span>New project</span>`;
   newProject.addEventListener("click", startNewThread);
   threadList.appendChild(newProject);
 
@@ -1143,12 +1335,6 @@ async function apiGet(path) {
 async function loadBridgeInfo() {
   try {
     const info = await apiGet("/api/info");
-    setActiveProvider(info.provider || "codex");
-    if (info.model) {
-      selectedModelLabel = info.model.replace(/^gpt-/i, "").replace(/^claude-/i, "");
-      localStorage.setItem("codexPhoneModelLabel", selectedModelLabel);
-      updateModelButton();
-    }
     tokenRequired = info.tokenRequired !== false;
     authMode = info.authMode || (tokenRequired ? "token" : "debug-no-token");
     if (!tokenRequired) {
@@ -1165,19 +1351,13 @@ async function loadBridgeInfo() {
 async function loadThreads({ background = false } = {}) {
   if (tokenRequired && !token) return;
   try {
-    const provider = currentThreadProvider();
-    const endpoint = provider === "codex" ? "/api/live-threads" : "/api/threads";
-    const result = await apiGet(`${endpoint}?provider=${encodeURIComponent(provider)}`);
-    if (result.activeProvider) setActiveProvider(result.activeProvider);
-    threadCache = (result.data || []).map((thread) => ({ ...thread, provider: result.provider || provider }));
+    const result = await apiGet("/api/live-threads");
+    threadCache = result.data || [];
+    syncOpenSessionsFromThreads();
     renderThreadList();
     lastThreadListError = "";
   } catch (error) {
     const message = error.message || String(error);
-    if (background && shouldSuppressBackgroundFetchError(message)) {
-      lastThreadListError = message;
-      return;
-    }
     if (message !== lastThreadListError) {
       lastThreadListError = message;
       addEntry("error", `thread一覧を読めませんでした: ${message}`);
@@ -1188,19 +1368,21 @@ async function loadThreads({ background = false } = {}) {
 
 async function refreshSelectedThread() {
   if (!selectedThread || liveTurnActive || selectedThreadRefreshActive) return;
-  const requestedThread = selectedThread;
-  const startedReadyNonce = threadReadyNonce.get(requestedThread) || 0;
+  if (!threadCache.some((thread) => thread.id === selectedThread)) {
+    const resumable = resumeCandidateSession || readResumeSession();
+    if (resumable?.threadId === selectedThread) return;
+    clearSelectedThread({ reason: `稼働中ではないthreadの履歴表示を停止しました: ${selectedThread}` });
+    return;
+  }
   selectedThreadRefreshActive = true;
   try {
-    const result = await apiGet(`/api/thread?thread=${encodeURIComponent(requestedThread)}&provider=${encodeURIComponent(currentThreadProvider())}`);
-    if (result.threadId !== requestedThread || result.threadId !== selectedThread) return;
-    if ((threadReadyNonce.get(requestedThread) || 0) !== startedReadyNonce) return;
-    renderHistoryIfChanged(result.history || [], { threadId: result.threadId });
+    const result = await apiGet(`/api/thread?thread=${encodeURIComponent(selectedThread)}`);
+    if (result.threadId !== selectedThread) return;
+    renderHistoryIfChanged(result.history || []);
     lastThreadRefreshError = "";
   } catch (error) {
     const message = error.message || String(error);
     if (recoverMissingSelectedThread(message)) return;
-    if (shouldSuppressBackgroundFetchError(message)) return;
     if (message !== lastThreadRefreshError) {
       lastThreadRefreshError = message;
       addEntry("error", `thread更新を読めませんでした: ${message}`);
@@ -1224,8 +1406,6 @@ function updateUrlThread() {
   const next = new URL(location.href);
   if (selectedThread) next.searchParams.set("thread", selectedThread);
   else next.searchParams.delete("thread");
-  if (currentThreadProvider() !== "codex") next.searchParams.set("provider", currentThreadProvider());
-  else next.searchParams.delete("provider");
   history.replaceState(null, "", next);
 }
 
@@ -1239,10 +1419,12 @@ function clearSelectedThread({ reason = "" } = {}) {
   lastThreadRefreshError = "";
   liveTurnActive = false;
   selectedThreadRefreshActive = false;
+  localStorage.removeItem("codexPhoneLastThread");
   updateUrlThread();
   renderHistory([]);
   renderThreadList();
   threadTitle.textContent = "新しい共有thread";
+  syncTerminalSessionMeta();
   if (reason) addEntry("status", reason);
   return previousThread;
 }
@@ -1259,21 +1441,47 @@ function recoverMissingSelectedThread(message) {
   return true;
 }
 
-function syncReadyThread(threadId) {
+function syncReadyThread(threadId, options = {}) {
   if (!threadId) return;
-  localStorage.setItem("codexPhoneLastThread", threadId);
-  if (selectedThread === threadId) return;
   selectedThread = threadId;
   updateUrlThread();
+  const existingIndex = threadCache.findIndex((thread) => thread.id === threadId);
+  const liveThread = {
+    id: threadId,
+    threadId,
+    cwd: currentWorkdir,
+    preview: "稼働中スレッド",
+    status: remoteSessionState?.status || "ready",
+    ready: true,
+    updatedAt: Date.now(),
+  };
+  if (existingIndex >= 0) threadCache[existingIndex] = { ...threadCache[existingIndex], ...liveThread };
+  else threadCache.unshift(liveThread);
   const selected = threadCache.find((thread) => thread.id === selectedThread);
   threadTitle.textContent = selected ? titleForThread(selected) : selectedThread;
+  addOrUpdateOpenSession({
+    threadId,
+    cwd: currentWorkdir,
+    title: selected ? titleForThread(selected) : basenameForPath(currentWorkdir),
+    status: remoteSessionState?.status || "ready",
+  });
   renderThreadList();
+  syncTerminalSessionMeta();
+  if (options.prewarmTerminal) ensureNativeTerminalConnected({ focus: activeMainMode === "terminal" });
 }
 
 function selectThread(threadId) {
   selectedThread = threadId;
-  if (threadId) localStorage.setItem("codexPhoneLastThread", threadId);
-  else localStorage.removeItem("codexPhoneLastThread");
+  const selected = threadCache.find((thread) => thread.id === selectedThread);
+  if (selected) {
+    const session = addOrUpdateOpenSession({
+      threadId: selected.id,
+      cwd: selected.cwd || "",
+      title: titleForThread(selected),
+      status: "ready",
+    });
+    activeSessionKey = session?.key || activeSessionKey;
+  }
   updateUrlThread();
   renderThreadList();
   closeSidebar();
@@ -1281,19 +1489,313 @@ function selectThread(threadId) {
 }
 
 function setCurrentWorkdir(workdir) {
-  currentWorkdir = workdir ?? currentWorkdir;
+  currentWorkdir = workdir || currentWorkdir || "";
+  applyPathbarColor();
+  syncHeaderCwd();
+  syncTerminalSessionMeta();
+  if (activeMainMode === "terminal") ensureNativeTerminalConnected();
+}
+
+function syncHeaderCwd() {
+  if (!headerCwd) return;
+  const cwd = currentWorkdir || "準備中";
+  headerCwd.textContent = currentWorkdir ? displayPath(currentWorkdir) : cwd;
+  headerCwd.title = currentWorkdir || "";
+}
+
+function syncTerminalSessionMeta() {
+  if (!terminalSessionMeta) return;
+  const thread = selectedThread || "thread準備中";
+  const cwd = currentWorkdir ? displayPath(currentWorkdir) : "cwd準備中";
+  const stateLabel = remoteSessionState?.label ? `  •  ${remoteSessionState.label}` : "";
+  terminalSessionMeta.textContent = `${thread}  •  ${cwd}${stateLabel}`;
+}
+
+function terminalSocketUrl({ threadId, cwd, cols, rows }) {
+  const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+  const url = new URL(`${protocol}//${window.location.host}/terminal`);
+  url.searchParams.set("thread", threadId);
+  if (cwd) url.searchParams.set("cwd", cwd);
+  if (token) url.searchParams.set("token", token);
+  if (cols) url.searchParams.set("cols", String(cols));
+  if (rows) url.searchParams.set("rows", String(rows));
+  return url.toString();
+}
+
+function ensureNativeTerminalConnected(options = {}) {
+  if (!terminalHost || !window.CodexNativeTerminal) {
+    if (terminalFallback) {
+      terminalFallback.textContent = "xterm bundle を読み込めませんでした。npm run build:ui を実行してください。";
+      terminalFallback.classList.remove("hidden");
+    }
+    return false;
+  }
+  if (!selectedThread) {
+    if (terminalFallback) {
+      terminalFallback.textContent = "thread が準備できたら Codex CLI TUI を開始します。";
+      terminalFallback.classList.remove("hidden");
+    }
+    return false;
+  }
+  if (!nativeTerminal) {
+    nativeTerminal = new window.CodexNativeTerminal({
+      host: terminalHost,
+      fallback: terminalFallback,
+      buildUrl: terminalSocketUrl,
+      fontSize: terminalFontSize,
+      themeMode: terminalThemeMode,
+      onStatus: (text) => {
+        if (terminalStatus) terminalStatus.textContent = text || "Codex Terminal";
+      },
+      onSessionState: applyRemoteSessionState,
+      onLongPressActiveChange: (active) => {
+        terminalLongPressActive = Boolean(active);
+        document.body.classList.toggle("terminal-touch-lock", terminalLongPressActive);
+      },
+    });
+  }
+  return nativeTerminal.connect({
+    threadId: selectedThread,
+    cwd: currentWorkdir,
+    force: Boolean(options.force),
+    focus: options.focus ?? activeMainMode === "terminal",
+  });
+}
+
+function sendNativeTerminalInput(data) {
+  const decoded = String(data || "")
+    .replace(/\\r/g, "\r")
+    .replace(/\\t/g, "\t")
+    .replace(/\\u007f/g, "\x7f")
+    .replace(/\\u001b/g, "\u001b")
+    .replace(/\\u0003/g, "\u0003");
+  if (isRemoteSessionRunning() && !decoded.includes("\u0003")) {
+    addStatus("Codex 処理中のため、ターミナル入力を一時停止しています。");
+    return false;
+  }
+  if (!nativeTerminal && !ensureNativeTerminalConnected()) return;
+  nativeTerminal?.sendInput(decoded);
+  nativeTerminal?.focus();
+  return true;
+}
+
+function appendTerminalPromptLine(line) {
+  if (!terminalPrompt || !line) return;
+  const current = terminalPrompt.value || "";
+  const separator = current && !current.endsWith("\n") ? "\n" : "";
+  terminalPrompt.value = `${current}${separator}${line}\n`;
+  setTerminalInputMode("text");
+  terminalPrompt.focus();
+}
+
+function submitTerminalPrompt() {
+  if (!terminalPrompt) return;
+  const text = terminalPrompt.value;
+  if (text.length === 0) {
+    sendNativeTerminalInput("\r");
+    return;
+  }
+  if (!sendNativeTerminalInput(text)) return;
+  terminalPrompt.value = "";
+  if (terminalSend) terminalSend.textContent = "Enter ↵";
+  terminalPrompt.focus();
+}
+
+async function handleTerminalAction(action) {
+  if (action === "cwd") {
+    appendTerminalPromptLine(currentWorkdir || ".");
+    return;
+  }
+  if (action === "attach") {
+    terminalFileInput?.click();
+    return;
+  }
+  if (action === "copy") {
+    const text = nativeTerminal?.visibleText?.() || "";
+    if (!text) {
+      addStatus("コピーできるターミナル表示がありません。");
+      return;
+    }
+    const copied = await copyTextToClipboard(text);
+    if (copied) {
+      if (terminalStatus) terminalStatus.textContent = "ターミナル表示をコピーしました";
+      addStatus("ターミナル表示をコピーしました。");
+      return;
+    }
+    showTerminalCopyFallback(text);
+    if (terminalStatus) terminalStatus.textContent = "コピー用テキストを表示中";
+    addStatus("ブラウザが自動コピーを拒否したため、コピー用テキストを表示しました。");
+  }
+}
+
+function showTerminalCtrlCConfirm() {
+  terminalCtrlCConfirm?.classList.remove("hidden");
+}
+
+function hideTerminalCtrlCConfirm() {
+  terminalCtrlCConfirm?.classList.add("hidden");
 }
 
 function startNewThread() {
-  forceNewThreadOnce = true;
-  nextThreadCwd = "";
-  selectThread("");
+  openSessionCreatePage();
 }
 
 function startNewThreadInCwd(cwd) {
   forceNewThreadOnce = true;
   nextThreadCwd = cwd;
+  pushCwdHistory(cwd);
+  closeSessionCreatePage();
   selectThread("");
+}
+
+function openSessionCreatePage(initialCwd = defaultDeveloperPath()) {
+  const nextCwd = initialCwd || defaultDeveloperPath();
+  sessionCreateCwd = nextCwd;
+  sessionBrowserCurrentPath = nextCwd || sessionBrowserCurrentPath || defaultDeveloperPath();
+  sessionShowHidden = false;
+  if (sessionHiddenToggle) sessionHiddenToggle.checked = false;
+  renderSessionCreatePage();
+  sessionCreatePage?.classList.remove("hidden");
+  closeSidebar();
+  closeSessionSwitcher();
+  void loadSessionBrowser(sessionBrowserCurrentPath);
+}
+
+function closeSessionCreatePage() {
+  sessionCreatePage?.classList.add("hidden");
+}
+
+function renderSessionCreatePage() {
+  if (sessionSelectedCwd) {
+    sessionSelectedCwd.innerHTML = sessionCreateCwd
+      ? `
+        <span class="session-card-main">
+          <strong>${escapeHtml(basenameForPath(sessionCreateCwd))}</strong>
+          <span>${escapeHtml(displayPath(sessionCreateCwd))}</span>
+        </span>
+        <span class="session-card-check" aria-hidden="true">✓</span>
+      `
+      : `
+        <span class="session-card-main">
+          <strong>フォルダを選択</strong>
+          <span>下のブラウザから作業ディレクトリを選択</span>
+        </span>
+      `;
+  }
+  if (sessionStartButton) sessionStartButton.disabled = !sessionCreateCwd;
+  renderSessionRecentList();
+}
+
+function renderSessionRecentList() {
+  if (!sessionRecentList) return;
+  sessionRecentList.replaceChildren();
+  if (sessionRecentClear) sessionRecentClear.disabled = !cwdHistory.length;
+  if (!cwdHistory.length) {
+    const empty = document.createElement("div");
+    empty.className = "session-empty";
+    empty.innerHTML = "<strong>最近使ったプロジェクトはまだありません。</strong><span>下のフォルダブラウザから開始先を選ぶと、次回ここに表示されます。</span>";
+    sessionRecentList.appendChild(empty);
+    return;
+  }
+  for (const cwd of cwdHistory) {
+    const card = document.createElement("button");
+    card.type = "button";
+    card.className = cwd === sessionCreateCwd ? "session-card session-project-card active" : "session-card session-project-card";
+    card.innerHTML = `
+      <span class="session-card-icon" aria-hidden="true">${fontAwesomeIcon("folder", "project-icon")}</span>
+      <span class="session-card-main">
+        <span class="session-card-title">${escapeHtml(basenameForPath(cwd))}</span>
+        <span class="session-card-path">${escapeHtml(displayPath(cwd))}</span>
+        <span class="session-card-meta">最近使用</span>
+      </span>
+      ${cwd === sessionCreateCwd ? '<span class="session-card-check" aria-hidden="true">✓</span>' : ""}
+    `;
+    card.addEventListener("click", () => {
+      sessionCreateCwd = cwd;
+      sessionBrowserCurrentPath = cwd;
+      renderSessionCreatePage();
+      void loadSessionBrowser(cwd);
+    });
+    sessionRecentList.appendChild(card);
+  }
+}
+
+function clearSessionRecentHistory() {
+  cwdHistory = [];
+  localStorage.removeItem(cwdHistoryStorageKey);
+  localStorage.removeItem("codexRemoteLastCwd");
+  renderSessionCreatePage();
+}
+
+function sessionDirectorySearchText() {
+  return String(sessionDirectorySearch?.value || "").trim().toLowerCase();
+}
+
+function renderSessionBrowserEntries() {
+  if (!sessionBrowserList) return;
+  sessionBrowserList.replaceChildren();
+  const searchText = sessionDirectorySearchText();
+  const entries = searchText
+    ? sessionBrowserEntries.filter((entry) => `${entry.name || ""} ${entry.path || ""}`.toLowerCase().includes(searchText))
+    : sessionBrowserEntries;
+  for (const entry of entries) {
+    const row = document.createElement("button");
+    row.type = "button";
+    row.className = "session-card session-folder-card";
+    row.innerHTML = `
+      <span class="session-card-icon" aria-hidden="true">${fontAwesomeIcon("folder", "project-icon")}</span>
+      <span class="session-card-main">
+        <span class="session-card-title">${escapeHtml(entry.name)}</span>
+        <span class="session-card-path">${escapeHtml(displayPath(entry.path))}</span>
+      </span>
+    `;
+    row.addEventListener("click", () => loadSessionBrowser(entry.path));
+    sessionBrowserList.appendChild(row);
+  }
+  if (!entries.length) {
+    const empty = document.createElement("div");
+    empty.className = "session-empty";
+    empty.textContent = searchText ? "一致するフォルダはありません。" : "下位フォルダはありません。";
+    sessionBrowserList.appendChild(empty);
+  }
+}
+
+async function loadSessionBrowser(pathValue = "", options = {}) {
+  if (!sessionBrowserList || !sessionBrowserPath) return;
+  if (!options.preserveSearch && sessionDirectorySearch) sessionDirectorySearch.value = "";
+  sessionBrowserList.replaceChildren();
+  const loading = document.createElement("div");
+  loading.className = "session-empty";
+  loading.textContent = "読み込み中...";
+  sessionBrowserList.appendChild(loading);
+  const query = new URLSearchParams();
+  if (pathValue) query.set("path", pathValue);
+  if (sessionShowHidden) query.set("hidden", "1");
+  try {
+    const suffix = query.toString() ? `?${query}` : "";
+    const listing = await apiGet(`/api/fs/list${suffix}`);
+    sessionBrowserCurrentPath = listing.path || "";
+    sessionBrowserParentPath = listing.parent || "";
+    sessionCreateCwd = listing.path || "";
+    sessionBrowserPath.textContent = displayPath(listing.path) || "/";
+    sessionBrowserPath.title = listing.path || "";
+    sessionBrowserUp.disabled = !sessionBrowserParentPath;
+    renderSessionCreatePage();
+    sessionBrowserEntries = listing.entries || [];
+    renderSessionBrowserEntries();
+  } catch (error) {
+    sessionBrowserEntries = [];
+    sessionBrowserList.replaceChildren();
+    const failed = document.createElement("div");
+    failed.className = "session-empty error";
+    failed.textContent = `読み込みに失敗しました: ${error.message}`;
+    sessionBrowserList.appendChild(failed);
+  }
+}
+
+function startSelectedSession() {
+  if (!sessionCreateCwd) return;
+  startNewThreadInCwd(sessionCreateCwd);
 }
 
 function showRightPanel({ focus = false } = {}) {
@@ -1337,9 +1839,13 @@ function addPanelRow(text, detail, onClick, icon = "") {
   row.className = "artifact-row";
   row.classList.toggle("no-icon", !icon);
   const iconHtml = icon ? `<span class="panel-row-icon" aria-hidden="true">${escapeHtml(icon)}</span>` : "";
+  const displayText = displayPath(text);
+  const displayDetail = displayPath(detail);
   row.innerHTML = detail
-    ? `${iconHtml}<span class="panel-row-copy"><strong>${escapeHtml(text)}</strong><small>${escapeHtml(detail)}</small></span>`
-    : `${iconHtml}<span class="panel-row-copy">${escapeHtml(text)}</span>`;
+    ? `${iconHtml}<span class="panel-row-copy"><strong>${escapeHtml(displayText)}</strong><small>${escapeHtml(displayDetail)}</small></span>`
+    : `${iconHtml}<span class="panel-row-copy">${escapeHtml(displayText)}</span>`;
+  if (displayText !== String(text || "")) row.title = String(text || "");
+  if (displayDetail !== String(detail || "")) row.title = [row.title, String(detail || "")].filter(Boolean).join("\n");
   if (onClick) row.addEventListener("click", onClick);
   artifactList.appendChild(row);
   return row;
@@ -1350,235 +1856,108 @@ function appendToPrompt(text) {
   promptInput.focus();
 }
 
-function ensureSlashSkillMenu() {
-  if (slashSkillMenu) return slashSkillMenu;
-  slashSkillMenu = document.createElement("div");
-  slashSkillMenu.id = "slashSkillMenu";
-  slashSkillMenu.className = "slash-skill-menu hidden";
-  slashSkillMenu.setAttribute("role", "listbox");
-  slashSkillMenu.setAttribute("aria-label", "インストール済みスキル");
-  composer.appendChild(slashSkillMenu);
-  return slashSkillMenu;
-}
-
-function slashTriggerMatch() {
-  const caret = promptInput.selectionStart ?? promptInput.value.length;
-  if (promptInput.selectionEnd !== caret) return null;
-  const before = promptInput.value.slice(0, caret);
-  const match = before.match(/(^|\s)([/／])([\p{L}\p{N}:_-]*)$/u);
-  if (!match) return null;
-  return { start: caret - match[3].length - match[2].length, end: caret, query: match[3].toLowerCase() };
-}
-
-async function loadSlashSkills() {
-  if (slashSkillsLoaded) return slashSkills;
-  if (slashSkillsPromise) return slashSkillsPromise;
-  slashSkillsPromise = apiGet("/api/skills")
-    .then((result) => {
-      slashSkills = result.data || [];
-      slashSkillsLoaded = true;
-      return slashSkills;
-    })
-    .finally(() => {
-      slashSkillsPromise = null;
-    });
-  return slashSkillsPromise;
-}
-
-function filterSlashSkills(query) {
-  const needle = String(query || "").toLowerCase();
-  return slashSkills.filter((skill) => {
-    const haystack = `${skill.trigger || ""} ${skill.name || ""} ${skill.id || ""} ${skill.pluginName || ""} ${skill.description || ""}`.toLowerCase();
-    return haystack.includes(needle);
-  });
-}
-
-function hideSlashSkillMenu() {
-  activeSlashMatch = null;
-  slashActiveIndex = 0;
-  slashSkillMenu?.classList.add("hidden");
-  promptInput.removeAttribute("aria-activedescendant");
-}
-
-function renderSlashSkillMenu(match) {
-  const menu = ensureSlashSkillMenu();
-  const options = filterSlashSkills(match.query).slice(0, 8);
-  slashActiveIndex = Math.min(slashActiveIndex, Math.max(options.length - 1, 0));
-  menu.replaceChildren();
-  if (!options.length) {
-    const empty = document.createElement("div");
-    empty.className = "slash-skill-empty";
-    empty.textContent = slashSkills.length ? "一致するスキルはありません" : "インストール済みスキルはありません";
-    menu.appendChild(empty);
-    menu.classList.remove("hidden");
-    return;
-  }
-  options.forEach((skill, index) => {
-    const row = document.createElement("button");
-    row.type = "button";
-    row.id = `slash-skill-${index}`;
-    row.className = "slash-skill-row";
-    row.setAttribute("role", "option");
-    row.setAttribute("aria-selected", String(index === slashActiveIndex));
-    row.innerHTML = `
-      <span class="slash-skill-command">${escapeHtml(skill.trigger || `/${skill.name || skill.id}`)}</span>
-      <span class="slash-skill-copy">
-        <strong>${escapeHtml(skill.name || skill.id)}</strong>
-        <small>${escapeHtml(skill.description || skill.pluginName || "installed skill")}</small>
-      </span>
-    `;
-    row.addEventListener("mousedown", (event) => event.preventDefault());
-    row.addEventListener("click", () => selectSlashSkill(skill));
-    menu.appendChild(row);
-  });
-  promptInput.setAttribute("aria-activedescendant", `slash-skill-${slashActiveIndex}`);
-  menu.classList.remove("hidden");
-}
-
-async function updateSlashSkillMenu() {
-  const match = slashTriggerMatch();
-  if (!match) {
-    hideSlashSkillMenu();
-    return;
-  }
-  activeSlashMatch = match;
-  ensureSlashSkillMenu().classList.remove("hidden");
-  if (!slashSkillsLoaded) ensureSlashSkillMenu().textContent = "読み込み中...";
-  try {
-    await loadSlashSkills();
-    if (!activeSlashMatch) return;
-    renderSlashSkillMenu(activeSlashMatch);
-  } catch (error) {
-    const menu = ensureSlashSkillMenu();
-    menu.replaceChildren();
-    const row = document.createElement("div");
-    row.className = "slash-skill-empty";
-    row.textContent = `スキルを読めませんでした: ${error.message}`;
-    menu.appendChild(row);
-    menu.classList.remove("hidden");
-  }
-}
-
-function slashMenuRows() {
-  return Array.from(ensureSlashSkillMenu().querySelectorAll(".slash-skill-row"));
-}
-
-function moveSlashSelection(delta) {
-  const rows = slashMenuRows();
-  if (!rows.length) return;
-  slashActiveIndex = (slashActiveIndex + delta + rows.length) % rows.length;
-  rows.forEach((row, index) => row.setAttribute("aria-selected", String(index === slashActiveIndex)));
-  promptInput.setAttribute("aria-activedescendant", `slash-skill-${slashActiveIndex}`);
-}
-
-function selectSlashSkill(skill) {
-  const match = activeSlashMatch || slashTriggerMatch();
-  if (!match) return;
-  const command = skill.trigger || `/${skill.name || skill.id}`;
-  promptInput.value = `${promptInput.value.slice(0, match.start)}${command} ${promptInput.value.slice(match.end)}`;
-  const caret = match.start + command.length + 1;
-  promptInput.setSelectionRange(caret, caret);
-  hideSlashSkillMenu();
-  promptInput.focus();
-}
-
-function openPromptModal() {
-  if (!promptModal || !promptModalInput) return;
-  promptModalInput.value = promptInput.value;
-  promptModal.classList.remove("hidden");
-  document.body.classList.add("prompt-modal-open");
-  requestAnimationFrame(() => promptModalInput.focus());
-}
-
-function closePromptModal({ apply = false } = {}) {
-  if (!promptModal || !promptModalInput) return;
-  if (apply) promptInput.value = promptModalInput.value;
-  promptModal.classList.add("hidden");
-  document.body.classList.remove("prompt-modal-open");
-  promptInput.focus();
-}
-
-function parseSlashInput(text) {
-  const raw = String(text || "").trim();
-  if (!raw.startsWith("/")) return null;
-  const match = raw.match(/^\/([A-Za-z0-9_-]+)(?:\s+([\s\S]*))?$/);
-  if (!match) return null;
-  return { raw, command: match[1].toLowerCase(), args: (match[2] || "").trim() };
-}
-
-async function slashCommands() {
-  if (slashCommandsCache.length) return slashCommandsCache;
-  const result = await apiGet("/api/slash-commands");
-  slashCommandsCache = result.data || [];
-  return slashCommandsCache;
-}
-
-function findClientSlashCommand(parsed) {
-  const name = parsed?.command || "";
-  return slashCommandsCache.find((command) => command.name === name || (command.aliases || []).includes(name)) || null;
-}
-
-function runnableSlashText(command) {
-  const base = `/${command.name}`;
-  return command.requiresArgs ? `${base} ` : base;
-}
-
-function closeSlashSuggestions() {
-  slashSuggestions?.classList.add("hidden");
-  slashSuggestions?.replaceChildren();
-}
-
-async function updateSlashSuggestions() {
-  if (!slashSuggestions) return;
-  const value = promptInput.value.trim();
-  if (!value.startsWith("/") || value.includes("\n")) {
-    closeSlashSuggestions();
-    return;
-  }
-  try {
-    const query = value.slice(1).split(/\s+/)[0].toLowerCase();
-    const commands = await slashCommands();
-    const matches = commands
-      .filter((command) => command.name.startsWith(query) || (command.aliases || []).some((alias) => alias.startsWith(query)))
-      .slice(0, 8);
-    slashSuggestions.replaceChildren();
-    for (const command of matches) {
-      const row = document.createElement("button");
-      row.type = "button";
-      row.className = "slash-suggestion";
-      row.innerHTML = `<strong>${escapeHtml(command.usage || `/${command.name}`)}</strong><small>${escapeHtml(command.description || "")}</small>`;
-      row.addEventListener("click", () => {
-        const runnable = runnableSlashText(command);
-        promptInput.value = runnable;
-        promptInput.setSelectionRange(runnable.length, runnable.length);
-        promptInput.focus();
-        closeSlashSuggestions();
-      });
-      slashSuggestions.appendChild(row);
+async function copyTextToClipboard(text) {
+  if (!String(text || "").trim()) return false;
+  if (navigator.clipboard?.writeText) {
+    try {
+      await navigator.clipboard.writeText(text);
+      return true;
+    } catch {
+      // ブラウザや権限状態で Clipboard API が拒否されるため、旧式コピーへ落とす。
     }
-    slashSuggestions.classList.toggle("hidden", !matches.length);
-  } catch {
-    closeSlashSuggestions();
   }
+
+  const textarea = document.createElement("textarea");
+  textarea.value = text;
+  textarea.setAttribute("readonly", "");
+  textarea.style.position = "fixed";
+  textarea.style.top = "0";
+  textarea.style.left = "-9999px";
+  textarea.style.opacity = "0";
+  document.body.appendChild(textarea);
+  textarea.focus();
+  textarea.select();
+  textarea.setSelectionRange(0, textarea.value.length);
+  let copied = false;
+  try {
+    copied = document.execCommand?.("copy") === true;
+  } catch {
+    copied = false;
+  }
+  textarea.remove();
+  return copied;
 }
 
-function handleClientSlashCommand(parsed) {
-  if (parsed?.command === "status") {
-    showStatus();
-    return true;
-  }
-  if (parsed?.command === "new") {
-    selectThread("");
-    return true;
-  }
-  if (parsed?.command === "commands" || parsed?.command === "help") {
-    showSlashCommands();
-    return true;
-  }
-  const command = findClientSlashCommand(parsed);
-  if (!command || command.kind !== "client") return false;
-  showSlashCommands();
-  return true;
+function closeTerminalCopyFallback() {
+  terminalCopyFallbackDialog?.remove();
+  terminalCopyFallbackDialog = null;
+}
+
+function selectCopyFallbackText(textarea) {
+  requestAnimationFrame(() => {
+    textarea.focus();
+    textarea.select();
+    textarea.setSelectionRange(0, textarea.value.length);
+  });
+}
+
+function showTerminalCopyFallback(text) {
+  closeTerminalCopyFallback();
+
+  const overlay = document.createElement("div");
+  overlay.className = "terminal-copy-fallback";
+  overlay.setAttribute("role", "dialog");
+  overlay.setAttribute("aria-modal", "true");
+  overlay.setAttribute("aria-labelledby", "terminalCopyFallbackTitle");
+
+  const card = document.createElement("div");
+  card.className = "terminal-copy-card";
+
+  const title = document.createElement("strong");
+  title.id = "terminalCopyFallbackTitle";
+  title.textContent = "コピー用テキスト";
+
+  const description = document.createElement("p");
+  description.textContent = "ブラウザが自動コピーを拒否しました。選択済みの内容をコピーしてください。";
+
+  const textarea = document.createElement("textarea");
+  textarea.className = "terminal-copy-textarea";
+  textarea.readOnly = true;
+  textarea.value = text;
+  textarea.setAttribute("aria-label", "ターミナル表示のコピー用テキスト");
+
+  const actions = document.createElement("div");
+  actions.className = "terminal-confirm-actions";
+
+  const retry = document.createElement("button");
+  retry.type = "button";
+  retry.textContent = "再コピー";
+  retry.addEventListener("click", async () => {
+    const copied = await copyTextToClipboard(text);
+    if (copied) {
+      closeTerminalCopyFallback();
+      if (terminalStatus) terminalStatus.textContent = "ターミナル表示をコピーしました";
+      addStatus("ターミナル表示をコピーしました。");
+      return;
+    }
+    selectCopyFallbackText(textarea);
+    if (terminalStatus) terminalStatus.textContent = "コピー用テキストを選択中";
+  });
+
+  const close = document.createElement("button");
+  close.type = "button";
+  close.textContent = "閉じる";
+  close.addEventListener("click", closeTerminalCopyFallback);
+
+  actions.append(retry, close);
+  card.append(title, description, textarea, actions);
+  overlay.appendChild(card);
+  overlay.addEventListener("click", (event) => {
+    if (event.target === overlay) closeTerminalCopyFallback();
+  });
+  document.body.appendChild(overlay);
+  terminalCopyFallbackDialog = overlay;
+  selectCopyFallbackText(textarea);
 }
 
 function renderArtifactIndex(items) {
@@ -1596,15 +1975,7 @@ function renderArtifactRows() {
   for (const item of artifactItems) {
     const icon = item.kind === "image" ? "IMG" : item.kind === "markdown" ? "MD" : "FILE";
     const label = item.name || item.path?.split(/[\\/]/).filter(Boolean).pop() || "artifact";
-    const row = addPanelRow(
-      label,
-      item.path || "",
-      (event) => {
-        event.stopPropagation();
-        showArtifact(item.path);
-      },
-      icon
-    );
+    const row = addPanelRow(label, item.path || "", () => showArtifact(item.path), icon);
     row.classList.toggle("active", item.path === activeArtifactPath);
   }
   if (!artifactItems.length) addPanelRow("アーティファクトは見つかりませんでした");
@@ -1624,68 +1995,11 @@ function escapeHtml(value) {
   });
 }
 
-function closestElement(target, selector) {
-  const element = target instanceof Element ? target : target?.parentElement;
-  return element?.closest(selector) || null;
-}
-
-function openArtifactFromTrigger(trigger) {
-  const path = trigger?.dataset?.openArtifactPath;
-  if (!path) return false;
-  closeModelMenu();
-  showArtifact(path);
-  return true;
-}
-
-function suppressNextArtifactTouchClick() {
-  suppressArtifactTouchClickUntil = Date.now() + 700;
-}
-
-function handleArtifactOpenEvent(event) {
-  const trigger = event.currentTarget?.dataset?.openArtifactPath
-    ? event.currentTarget
-    : closestElement(event.target, "[data-open-artifact-path]");
-  if (!trigger) return false;
-  event.preventDefault();
-  event.stopPropagation();
-  return openArtifactFromTrigger(trigger);
-}
-
-function bindArtifactOpenTrigger(trigger) {
-  trigger.addEventListener("click", handleArtifactOpenEvent);
-  trigger.addEventListener("pointerdown", (event) => {
-    if (event.pointerType && event.pointerType !== "mouse") event.preventDefault();
-  });
-  trigger.addEventListener("pointerup", (event) => {
-    if (event.pointerType && event.pointerType !== "mouse") {
-      suppressNextArtifactTouchClick();
-      handleArtifactOpenEvent(event);
-    }
-  });
-}
-
-document.addEventListener(
-  "click",
-  (event) => {
-    if (Date.now() >= suppressArtifactTouchClickUntil) return;
-    event.preventDefault();
-    event.stopPropagation();
-  },
-  true,
-);
-
 function showToolError(name, error) {
   clearPanel(name);
   addPanelRow("読み込みに失敗しました", error.message);
   addEntry("error", `${name}: ${error.message}`);
   document.body.classList.remove("show-sidebar");
-}
-
-function getPluginStatus(summary = {}) {
-  const state = String(summary.status || summary.state || "").toLowerCase();
-  if (summary.enabled || state === "enabled") return "enabled";
-  if (summary.installed || state === "installed") return "installed";
-  return null;
 }
 
 async function showPlugins() {
@@ -1697,14 +2011,13 @@ async function showPlugins() {
     artifactList.replaceChildren();
     for (const marketplace of marketplaces) {
       const plugins = marketplace.plugins || marketplace.entries || [];
+      if (!plugins.length) addPanelRow(marketplace.name || marketplace.id || "marketplace", "プラグインなし");
       for (const plugin of plugins) {
-        const summary = plugin?.summary || plugin || {};
-        const status = getPluginStatus(summary);
-        if (!status) continue;
-        addPanelRow(summary.name || summary.id, status);
+        const summary = plugin.summary || plugin;
+        addPanelRow(summary.name || summary.id, summary.enabled ? "enabled" : summary.installed ? "installed" : "available");
       }
     }
-    if (!artifactList.children.length) addPanelRow("導入済み/有効なプラグインはありません");
+    if (!artifactList.children.length) addPanelRow("プラグインは見つかりませんでした");
   } catch (error) {
     showToolError("プラグイン", error);
   }
@@ -1760,10 +2073,6 @@ async function showFolderBrowser(pathValue = "", showHidden = false) {
     }
     if (!listing.entries?.length) addPanelRow("下位フォルダはありません", listing.path);
   } catch (error) {
-    if (pathValue) {
-      showFolderBrowser("", showHidden);
-      return;
-    }
     showToolError("フォルダ", error);
   }
 }
@@ -1779,7 +2088,6 @@ async function showSettings() {
     if (renderSeq !== settingsRenderSeq) return;
     loadingRow.remove();
     const config = result.config?.config || {};
-    addPanelRow("Provider", config.provider || activeProvider);
     addPanelRow("認証", result.auth?.authMethod || "unknown");
     addPanelRow("既定モデル", config.model || selectedModel || "unknown");
     addPanelRow("承認", accessMode.approvalPolicy);
@@ -1928,27 +2236,6 @@ async function showReview() {
   }
 }
 
-async function showSlashCommands() {
-  clearPanel("スラッシュコマンド", "sources");
-  addPanelRow("読み込み中...");
-  try {
-    const commands = await slashCommands();
-    artifactList.replaceChildren();
-    for (const command of commands) {
-      addPanelRow(command.usage || `/${command.name}`, command.description || command.kind || "", () => {
-        const runnable = runnableSlashText(command);
-        promptInput.value = runnable;
-        promptInput.setSelectionRange(runnable.length, runnable.length);
-        promptInput.focus();
-        closeSlashSuggestions();
-      }, command.kind === "client" ? "UI" : command.kind === "shell" ? "$" : "/");
-    }
-    if (!commands.length) addPanelRow("スラッシュコマンドは見つかりませんでした");
-  } catch (error) {
-    showToolError("スラッシュコマンド", error);
-  }
-}
-
 function showSources() {
   clearPanel("情報源", "sources");
   addPanelRow("Web調査を入力へ追加", "外部確認が必要なターンで使う", () => {
@@ -1956,9 +2243,8 @@ function showSources() {
     addStatus("Web調査指示をチャット入力へ追加しました。");
   }, "WEB");
   addPanelRow("スキル", "利用可能な skill を入力へ追加", showSkills, "SK");
-  addPanelRow("スラッシュコマンド", "/compact、/diff、/review など", showSlashCommands, "/");
   addPanelRow("ローカルファイル", "Filesタブから @path を追加できます", showWorkspace, "FILE");
-  addPanelRow("フォルダを選んで新しいチャット", "home 配下のフォルダだけ表示", () => showFolderBrowser(currentWorkdir || ""), "DIR");
+  addPanelRow("フォルダを選んで新しいチャット", "home 配下のフォルダだけ表示", () => showFolderBrowser(currentWorkdir), "DIR");
   addPanelRow("差分レビュー", "Diffタブから変更ファイルを追加できます", showReview, "DIFF");
 }
 
@@ -1992,16 +2278,10 @@ function startVoiceInput() {
 async function showStatus() {
   clearPanel("バックグラウンド", "status");
   try {
-    const result = await apiGet("/api/status?refreshRateLimits=1");
-    setWorkspaceMeta(result);
-    addPanelRow("Provider", result.provider || activeProvider);
+    const result = await apiGet("/api/status");
     addPanelRow("UI port", String(result.uiPort));
-    addPanelRow("Codex app-server", result.codexUrl || "未使用");
-    addRateLimitPanelRows(result.rateLimits || null);
+    addPanelRow("Codex app-server", result.codexUrl);
     addPanelRow("履歴同期", result.historySyncEnabled ? "有効" : "無効");
-    addPanelRow("リポジトリ", result.repoName || "");
-    addPanelRow("現在地", result.workspaceLocation || result.workdir || "");
-    addPanelRow("Git ブランチ", result.gitBranch || "不明");
     addPanelRow("作業ディレクトリ", result.workdir);
     for (const bridge of result.bridges || []) {
       addPanelRow(bridge.threadId || "thread準備中", `${bridge.clients}端末 / ${bridge.ready ? "ready" : "starting"}`);
@@ -2012,7 +2292,6 @@ async function showStatus() {
 }
 
 async function showArtifact(path) {
-  const shouldFocusPanel = window.matchMedia("(max-width: 1100px)").matches;
   showRightPanel();
   setActivePanel("artifacts");
   artifactTitle.textContent = "アーティファクト";
@@ -2027,7 +2306,6 @@ async function showArtifact(path) {
     </div>
     <p>読み込み中...</p>
   `;
-  if (shouldFocusPanel) syncRightPanelState({ focus: true });
   try {
     const result = await apiGet(`/api/file?path=${encodeURIComponent(path)}`);
     setArtifactPreview(result);
@@ -2172,25 +2450,114 @@ function bindResizeHandle(handle, kind) {
   });
 }
 
+function bindSessionSwipe() {
+  const surface = document.querySelector(".mode-stage");
+  if (!surface) return;
+  let gesture = null;
+  let wheelGesture = { accumX: 0, lastWheelAt: 0, lastSwitchAt: 0 };
+  const touchActivatePx = 18;
+  const touchDistanceRatio = 0.16;
+  const touchVelocityPxPerMs = 0.32;
+  const wheelResetMs = 180;
+  const wheelCooldownMs = 350;
+  const wheelMinThresholdPx = 42;
+  const wheelMaxThresholdPx = 110;
+  const wheelThresholdRatio = 0.12;
+  const isOverlayOpen = () =>
+    sessionCreatePage?.classList.contains("hidden") === false ||
+    sessionSwitcherOverlay?.classList.contains("hidden") === false;
+  const isControlTarget = (target) => {
+    if (!target?.closest) return false;
+    if (target.closest("#terminalHost")) return false;
+    return Boolean(
+      target.closest(
+        "input, textarea, select, button, a, [contenteditable='true'], #composer, #terminalInputArea, .terminal-toolbar, .approval",
+      ),
+    );
+  };
+  const isSwipeBlocked = (event) => terminalLongPressActive || isOverlayOpen() || isControlTarget(event?.target);
+  surface.addEventListener("touchstart", (event) => {
+    if (event.touches.length !== 1 || isSwipeBlocked(event)) return;
+    const touch = event.touches[0];
+    gesture = { x: touch.clientX, y: touch.clientY, time: Date.now(), active: false };
+  }, { passive: true });
+  surface.addEventListener("touchmove", (event) => {
+    if (!gesture || event.touches.length !== 1) return;
+    if (terminalLongPressActive) {
+      gesture = null;
+      return;
+    }
+    const touch = event.touches[0];
+    const dx = touch.clientX - gesture.x;
+    const dy = touch.clientY - gesture.y;
+    if (!gesture.active && Math.abs(dx) > touchActivatePx && Math.abs(dx) > Math.abs(dy) * 1.25) gesture.active = true;
+    if (gesture.active) event.preventDefault();
+  }, { passive: false });
+  const finish = (event) => {
+    if (!gesture) return;
+    const touch = event.changedTouches?.[0];
+    const dx = touch ? touch.clientX - gesture.x : 0;
+    const elapsed = Math.max(1, Date.now() - gesture.time);
+    const velocity = Math.abs(dx) / elapsed;
+    const shouldSwitch = gesture.active && (Math.abs(dx) > surface.clientWidth * touchDistanceRatio || velocity > touchVelocityPxPerMs);
+    if (shouldSwitch) switchOpenSessionByOffset(dx < 0 ? 1 : -1);
+    gesture = null;
+  };
+  surface.addEventListener("touchend", finish, { passive: true });
+  surface.addEventListener("touchcancel", () => {
+    gesture = null;
+  }, { passive: true });
+  surface.addEventListener("wheel", (event) => {
+    if (isSwipeBlocked(event)) return;
+    if (Math.abs(event.deltaX) < Math.abs(event.deltaY) * 1.1) return;
+    event.preventDefault();
+    const now = Date.now();
+    if (now - wheelGesture.lastWheelAt > wheelResetMs) wheelGesture.accumX = 0;
+    wheelGesture.lastWheelAt = now;
+    wheelGesture.accumX += event.deltaX;
+    if (now - wheelGesture.lastSwitchAt < wheelCooldownMs) return;
+    const threshold = Math.max(
+      wheelMinThresholdPx,
+      Math.min(wheelMaxThresholdPx, surface.clientWidth * wheelThresholdRatio),
+    );
+    if (Math.abs(wheelGesture.accumX) < threshold) return;
+    switchOpenSessionByOffset(wheelGesture.accumX > 0 ? 1 : -1);
+    wheelGesture = { accumX: 0, lastWheelAt: now, lastSwitchAt: now };
+  }, { passive: false });
+}
+
+function sendPromptToBridge(text, attachments = []) {
+  const trimmed = String(text || "").trim();
+  if ((!trimmed && !attachments.length) || !ws || ws.readyState !== WebSocket.OPEN) return false;
+  ws.send(
+    JSON.stringify({
+      type: "prompt",
+      token,
+      text: trimmed || "添付画像を確認してください。",
+      attachments,
+      options: {
+        model: selectedModel || undefined,
+        approvalPolicy: accessMode.approvalPolicy,
+        sandboxMode: accessMode.sandboxMode,
+      },
+    }),
+  );
+  return true;
+}
+
 function connect() {
   if (tokenRequired && !token) {
     addEntry("error", "URLに token がありません。Mac側に表示されたURLをそのまま開いてください。");
     return;
   }
-  if (currentThreadProvider() !== activeProvider) {
-    if (ws) ws.close();
-    setReady(false);
-    meta.textContent = `${providerLabel(currentThreadProvider())} は ${providerLabel(activeProvider)} bridge では開けません`;
-    setRunState("disconnected", "Providerが違います");
-    return;
-  }
   if (ws) ws.close();
   liveTurnActive = false;
+  remoteSessionState = null;
   setRunState("connecting");
-  prepareThreadHistoryForConnect(selectedThread);
+  lastHistorySignature = "";
+  renderHistory([]);
   const selected = threadCache.find((thread) => thread.id === selectedThread);
   threadTitle.textContent = selected ? titleForThread(selected) : "新しい共有thread";
-  if (selectedThread) refreshSelectedThread();
 
   const proto = location.protocol === "https:" ? "wss:" : "ws:";
   const query = new URLSearchParams();
@@ -2203,47 +2570,32 @@ function connect() {
   forceNewThreadOnce = false;
   nextThreadCwd = "";
   const bridgeQuery = query.toString();
-  const socket = new WebSocket(`${proto}//${location.host}/bridge${bridgeQuery ? `?${bridgeQuery}` : ""}`);
-  ws = socket;
+  ws = new WebSocket(`${proto}//${location.host}/bridge${bridgeQuery ? `?${bridgeQuery}` : ""}`);
   connectButton.disabled = true;
   meta.textContent = "接続中";
+  syncHeaderCwd();
 
-  socket.addEventListener("open", (event) => {
-    if (event.currentTarget !== ws) return;
+  ws.addEventListener("open", () => {
     setRunState("connecting", "Codex に接続中");
     addEntry("status", "Macの共有ブリッジへ接続しました。");
   });
 
-  socket.addEventListener("message", (event) => {
-    if (event.currentTarget !== ws) return;
-    let msg;
-    try {
-      msg = JSON.parse(event.data);
-    } catch {
-      setRunState("error", "bridge応答を読み取れません");
-      addEntry("error", "bridge応答を読み取れません。再接続してください。");
-      return;
-    }
+  ws.addEventListener("message", (event) => {
+    const msg = JSON.parse(event.data);
     if (msg.type === "ready") {
       setReady(true);
       setCurrentWorkdir(msg.workdir);
-      setWorkspaceMeta(msg);
-      setActiveProvider(msg.provider || activeProvider);
-      if (msg.model) {
-        selectedModelLabel = msg.model.replace(/^gpt-/i, "").replace(/^claude-/i, "");
-        if (activeProvider === "codex") selectedModelLabel = selectedModelLabel.toUpperCase();
-        updateModelButton();
-      }
-      const readyThreadId = msg.threadId || selectedThread;
-      incrementThreadReadyNonce(readyThreadId);
-      syncReadyThread(msg.threadId);
-      renderHistoryIfChanged(msg.history || [], { threadId: readyThreadId });
-      meta.textContent = `${msg.model}  •  ${msg.clients}端末  •  ${msg.workdir}`;
-      setRunState(msg.run?.state || "ready", msg.run?.label);
-      if (Array.isArray(msg.pendingApprovals) && msg.pendingApprovals.length) {
-        showPendingApproval(msg.pendingApprovals[0]);
-      }
-      addEntry("status", `共有${providerLabel(msg.provider || "codex")} thread ready: ${msg.threadId}`);
+      const materialized = Boolean((msg.history || []).length);
+      syncReadyThread(msg.threadId, { prewarmTerminal: materialized });
+      renderHistoryIfChanged(msg.history || []);
+      meta.textContent = `${msg.model}  •  ${msg.clients}端末`;
+      setRunState("ready");
+      if (msg.sessionState) applyRemoteSessionState(msg.sessionState);
+      addEntry("status", `共有Codex thread ready: ${msg.threadId}`);
+      return;
+    }
+    if (msg.type === "sessionState") {
+      applyRemoteSessionState(msg.state);
       return;
     }
     if (msg.type === "user") {
@@ -2261,44 +2613,26 @@ function connect() {
       return;
     }
     if (msg.type === "approval") {
-      showPendingApproval(msg.approval || msg.request);
-      return;
-    }
-    if (msg.type === "approvalResolved") {
-      if (!pendingApproval || pendingApproval.approvalId === msg.approvalId) {
-        pendingApproval = null;
-        approval.classList.add("hidden");
-      }
-      return;
-    }
-    if (msg.type === "runState") {
-      setRunState(msg.run?.state || "ready", msg.run?.label);
+      pendingApproval = msg.request;
+      setRunState("approval");
+      approvalText.textContent = JSON.stringify(msg.request.params, null, 2);
+      approval.classList.remove("hidden");
       return;
     }
     if (msg.type === "turn" && msg.status === "completed") {
       liveTurnActive = false;
       lastHistorySignature = "";
       assistantEntry = null;
-      setRunState(msg.run?.state || "done", msg.run?.label || "完了しました");
+      setRunState("done", "完了しました");
+      ensureNativeTerminalConnected({ focus: activeMainMode === "terminal" });
       loadThreads();
       refreshSelectedThread();
-      appendReviewDigest();
-      return;
-    }
-    if (msg.type === "turn" && msg.status === "interrupted") {
-      liveTurnActive = false;
-      assistantEntry = null;
-      pendingApproval = null;
-      approval.classList.add("hidden");
-      setRunState("error", msg.reason || "処理が中断されました");
       return;
     }
     if (msg.type === "error") {
       if (recoverMissingSelectedThread(msg.text)) return;
-      const problem = normalizeUiError(msg.text || msg);
-      setRunState(problem.state, problem.text);
-      addEntry(problem.kind, problem.text);
-      if (problem.detail && problem.detail !== problem.text) console.warn("Codex bridge error details", problem.detail);
+      setRunState("error", msg.text || "エラー");
+      addEntry("error", msg.text);
       return;
     }
     if (msg.type === "status") {
@@ -2309,11 +2643,8 @@ function connect() {
     }
   });
 
-  socket.addEventListener("close", (event) => {
-    if (event.currentTarget !== ws) return;
+  ws.addEventListener("close", () => {
     setReady(false);
-    interruptRequestPending = false;
-    updateInterruptButton();
     connectButton.disabled = false;
     meta.textContent = "切断";
     setRunState("disconnected");
@@ -2323,95 +2654,21 @@ function connect() {
 composer.addEventListener("submit", (event) => {
   event.preventDefault();
   const text = promptInput.value.trim();
-  if ((!text && !pendingFiles.length) || !ws || ws.readyState !== WebSocket.OPEN) return;
-  const slash = parseSlashInput(text);
-  if (slash && !pendingFiles.length) {
-    if (handleClientSlashCommand(slash)) {
-      promptInput.value = "";
-      closeSlashSuggestions();
-      return;
-    }
-    ws.send(
-      JSON.stringify({
-        type: "slashCommand",
-        token,
-        text,
-        options: {
-          model: selectedModel || undefined,
-          approvalPolicy: accessMode.approvalPolicy,
-          sandboxMode: accessMode.sandboxMode,
-        },
-      }),
-    );
-    promptInput.value = "";
-    closeSlashSuggestions();
-    return;
-  }
-  ws.send(
-    JSON.stringify({
-      type: "prompt",
-      token,
-      text: text || "添付画像を確認してください。",
-      attachments: pendingFiles,
-      options: {
-        model: selectedModel || undefined,
-        approvalPolicy: accessMode.approvalPolicy,
-        sandboxMode: accessMode.sandboxMode,
-      },
-    }),
-  );
+  if (!sendPromptToBridge(text, pendingFiles)) return;
   promptInput.value = "";
-  closeSlashSuggestions();
   pendingFiles = [];
   renderAttachments();
 });
-
-promptInput.addEventListener("input", () => updateSlashSkillMenu());
-promptInput.addEventListener("click", () => updateSlashSkillMenu());
-promptInput.addEventListener("compositionend", () => updateSlashSkillMenu());
 promptInput.addEventListener("keydown", (event) => {
-  if (!slashSkillMenu || slashSkillMenu.classList.contains("hidden")) return;
-  if (event.key === "Escape") {
+  if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
     event.preventDefault();
-    hideSlashSkillMenu();
-    return;
-  }
-  if (event.key === "ArrowDown" || event.key === "ArrowUp") {
-    event.preventDefault();
-    moveSlashSelection(event.key === "ArrowDown" ? 1 : -1);
-    return;
-  }
-  if (event.key === "Enter" || event.key === "Tab") {
-    const rows = slashMenuRows();
-    if (!rows.length) return;
-    event.preventDefault();
-    const skill = filterSlashSkills(activeSlashMatch?.query || "")[slashActiveIndex];
-    if (skill) selectSlashSkill(skill);
-  }
-});
-
-interruptButton?.addEventListener("click", () => {
-  if (!interruptibleRunStates.has(currentRunState) || interruptRequestPending) return;
-  if (!ws || ws.readyState !== WebSocket.OPEN) {
-    addStatus("未接続のため中断要求を送信できません。");
-    return;
-  }
-  interruptRequestPending = true;
-  pendingApproval = null;
-  approval.classList.add("hidden");
-  setRunState("interrupting", "中断要求を送信中");
-  try {
-    ws.send(JSON.stringify({ type: "interrupt", token }));
-  } catch (error) {
-    interruptRequestPending = false;
-    updateInterruptButton();
-    addEntry("error", `中断要求の送信に失敗しました: ${error.message}`);
+    composer.requestSubmit();
   }
 });
 
 approveButton.addEventListener("click", () => {
   if (!pendingApproval) return;
-  ws.send(JSON.stringify({ type: "approval", token, decision: "accept", approvalId: pendingApproval.approvalId, request: pendingApproval }));
+  ws.send(JSON.stringify({ type: "approval", token, decision: "accept", request: pendingApproval }));
   approval.classList.add("hidden");
   pendingApproval = null;
   setRunState("running", "承認済み・処理中");
@@ -2419,13 +2676,13 @@ approveButton.addEventListener("click", () => {
 
 declineButton.addEventListener("click", () => {
   if (!pendingApproval) return;
-  ws.send(JSON.stringify({ type: "approval", token, decision: "decline", approvalId: pendingApproval.approvalId, request: pendingApproval }));
+  ws.send(JSON.stringify({ type: "approval", token, decision: "decline", request: pendingApproval }));
   approval.classList.add("hidden");
   pendingApproval = null;
   setRunState("running", "拒否済み・処理中");
 });
 
-newThreadButton.addEventListener("click", () => selectThread(""));
+newThreadButton.addEventListener("click", () => openSessionCreatePage());
 searchButton.addEventListener("click", () => {
   threadSearch.classList.toggle("hidden");
   threadSearch.focus();
@@ -2433,8 +2690,6 @@ searchButton.addEventListener("click", () => {
   openSidebar();
 });
 threadSearch.addEventListener("input", renderThreadList);
-promptInput.addEventListener("input", updateSlashSuggestions);
-promptInput.addEventListener("blur", () => setTimeout(closeSlashSuggestions, 120));
 pluginsButton.addEventListener("click", showPlugins);
 automationsButton.addEventListener("click", showAutomations);
 settingsButton.addEventListener("click", showSettings);
@@ -2456,23 +2711,92 @@ menuButton.addEventListener("click", () => {
     addStatus("右パネルを開きました。");
   }
 });
-closePanelButton.addEventListener("click", () => closeRightPanel({ restoreFocus: true }));
-artifactPreview.addEventListener("click", (event) => {
-  if (closestElement(event.target, "[data-preview-close]")) hideArtifactPreview();
+pathbarColorPicker?.addEventListener("input", () => {
+  savePathbarColorForCurrentWorkdir(pathbarColorPicker.value);
 });
-addButton.addEventListener("click", () => fileInput.click());
-expandPromptButton?.addEventListener("click", openPromptModal);
-closePromptModalButton?.addEventListener("click", () => closePromptModal({ apply: true }));
-cancelPromptModalButton?.addEventListener("click", () => closePromptModal({ apply: false }));
-applyPromptModalButton?.addEventListener("click", () => closePromptModal({ apply: true }));
-promptModal?.addEventListener("click", (event) => {
-  if (event.target === promptModal) closePromptModal({ apply: true });
-});
-document.addEventListener("keydown", (event) => {
-  if (event.key === "Escape" && promptModal && !promptModal.classList.contains("hidden")) {
-    closePromptModal({ apply: true });
+sessionSwitcher?.addEventListener("click", openSessionSwitcher);
+sessionSwitcher?.addEventListener("keydown", (event) => {
+  if (event.key === "Enter" || event.key === " ") {
+    event.preventDefault();
+    openSessionSwitcher();
   }
 });
+sessionSwitcherClose?.addEventListener("click", closeSessionSwitcher);
+sessionSwitcherNew?.addEventListener("click", () => openSessionCreatePage());
+sessionCreateCancel?.addEventListener("click", closeSessionCreatePage);
+sessionRecentClear?.addEventListener("click", clearSessionRecentHistory);
+sessionBrowserUp?.addEventListener("click", () => {
+  if (sessionBrowserParentPath) void loadSessionBrowser(sessionBrowserParentPath);
+});
+sessionDirectorySearch?.addEventListener("input", renderSessionBrowserEntries);
+sessionHiddenToggle?.addEventListener("change", () => {
+  sessionShowHidden = Boolean(sessionHiddenToggle.checked);
+  void loadSessionBrowser(sessionBrowserCurrentPath || defaultDeveloperPath(), { preserveSearch: true });
+});
+sessionStartButton?.addEventListener("click", startSelectedSession);
+closePanelButton.addEventListener("click", () => closeRightPanel({ restoreFocus: true }));
+for (const button of modeButtons) {
+  button.addEventListener("click", () => setMainMode(button.dataset.mainMode));
+}
+terminalReconnect?.addEventListener("click", () => {
+  setMainMode("terminal");
+  ensureNativeTerminalConnected({ force: true });
+});
+terminalThemeToggle?.addEventListener("click", () => {
+  terminalThemeMode = terminalThemeMode === "dark" ? "light" : "dark";
+  localStorage.setItem("codexTerminalThemeMode", terminalThemeMode);
+  applyTerminalTheme();
+});
+terminalZoomOut?.addEventListener("click", () => {
+  const index = terminalFontSizes.indexOf(terminalFontSize);
+  if (index <= 0) return;
+  terminalFontSize = terminalFontSizes[index - 1];
+  localStorage.setItem("codexTerminalFontSize", String(terminalFontSize));
+  applyTerminalFontSize();
+});
+terminalZoomIn?.addEventListener("click", () => {
+  const index = terminalFontSizes.indexOf(terminalFontSize);
+  if (index < 0 || index >= terminalFontSizes.length - 1) return;
+  terminalFontSize = terminalFontSizes[index + 1];
+  localStorage.setItem("codexTerminalFontSize", String(terminalFontSize));
+  applyTerminalFontSize();
+});
+for (const button of terminalModeButtons) {
+  button.addEventListener("click", () => setTerminalInputMode(button.dataset.terminalInputMode));
+}
+for (const button of terminalNativeInputButtons) {
+  button.addEventListener("click", () => sendNativeTerminalInput(button.dataset.terminalPtyInput || ""));
+}
+for (const button of terminalActionButtons) {
+  button.addEventListener("click", () => void handleTerminalAction(button.dataset.terminalAction));
+}
+terminalSend?.addEventListener("click", submitTerminalPrompt);
+terminalPrompt?.addEventListener("keydown", (event) => {
+  if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
+    event.preventDefault();
+    submitTerminalPrompt();
+  }
+});
+terminalPrompt?.addEventListener("input", () => {
+  if (terminalSend) terminalSend.textContent = terminalPrompt.value.length === 0 ? "Enter ↵" : "Send";
+});
+terminalCtrlCButton?.addEventListener("click", showTerminalCtrlCConfirm);
+terminalCtrlCCancel?.addEventListener("click", hideTerminalCtrlCConfirm);
+terminalCtrlCConfirmButton?.addEventListener("click", () => {
+  sendNativeTerminalInput("\u0003");
+  hideTerminalCtrlCConfirm();
+});
+terminalFileInput?.addEventListener("change", () => {
+  const file = terminalFileInput.files?.[0];
+  terminalFileInput.value = "";
+  if (!file) return;
+  appendTerminalPromptLine(`添付画像: ${file.name}`);
+  addStatus("画像名をターミナル入力欄に追加しました。実ファイルの参照が必要な場合はフォルダパスも追加してください。");
+});
+artifactPreview.addEventListener("click", (event) => {
+  if (event.target.closest("[data-preview-close]")) hideArtifactPreview();
+});
+addButton.addEventListener("click", () => fileInput.click());
 fileInput.addEventListener("change", async () => {
   const files = Array.from(fileInput.files || []).filter((file) => file.type.startsWith("image/"));
   try {
@@ -2494,39 +2818,38 @@ accessButton.addEventListener("click", () => {
 modelButton.addEventListener("click", toggleModelMenu);
 voiceButton.addEventListener("click", startVoiceInput);
 modelMenu.addEventListener("click", (event) => {
-  const reasoningRow = closestElement(event.target, "[data-reasoning]");
+  const reasoningRow = event.target.closest("[data-reasoning]");
   if (reasoningRow) {
     selectReasoning(reasoningRow.dataset.reasoning);
     return;
   }
-  const modelRow = closestElement(event.target, "[data-model-choice]");
+  const modelRow = event.target.closest("[data-model-choice]");
   if (modelRow) {
     selectModel(modelRow.dataset.modelChoice);
     return;
   }
-  if (closestElement(event.target, "#moreModelsButton")) {
+  if (event.target.closest("#moreModelsButton")) {
     closeModelMenu();
     showModels();
   }
 });
 document.addEventListener("click", async (event) => {
-  if (handleArtifactOpenEvent(event)) return;
+  const artifactOpen = event.target.closest("[data-open-artifact-path]");
+  if (artifactOpen) {
+    showArtifact(artifactOpen.dataset.openArtifactPath);
+    return;
+  }
 
-  const button = closestElement(event.target, "[data-message-action='copy']");
+  const button = event.target.closest("[data-message-action='copy']");
   if (!button) return;
   const entry = button.closest(".entry");
   const body = entry?.querySelector(".entry-body");
   const text = body?.markdownSource || body?.innerText || "";
   if (!text.trim()) return;
-  if (!navigator.clipboard?.writeText) {
-    appendToPrompt(text);
-    addStatus("クリップボードを利用できないため、入力欄へ追加しました。");
-    return;
-  }
-  try {
-    await navigator.clipboard.writeText(text);
+  const copied = await copyTextToClipboard(text);
+  if (copied) {
     addStatus("メッセージをコピーしました。");
-  } catch {
+  } else {
     appendToPrompt(text);
     addStatus("クリップボードに書き込めないため、入力欄へ追加しました。");
   }
@@ -2557,7 +2880,6 @@ document.addEventListener("keydown", (event) => {
 document.addEventListener("click", (event) => {
   if (!document.body.classList.contains("show-panel")) return;
   if (window.matchMedia("(min-width: 1101px)").matches) return;
-  if (closestElement(event.target, "[data-open-artifact-path]")) return;
   if (artifactPanel.contains(event.target) || menuButton.contains(event.target)) return;
   closeRightPanel({ restoreFocus: true });
 });
@@ -2584,6 +2906,11 @@ for (const button of artifactButtons) {
 }
 
 setReady(false);
+setMainMode(activeMainMode);
+setTerminalInputMode(terminalInputMode);
+applyTerminalTheme();
+applyTerminalFontSize();
+if (terminalSend && terminalPrompt) terminalSend.textContent = terminalPrompt.value.length === 0 ? "Enter ↵" : "Send";
 setAccessButtonLabel();
 updateModelButton();
 modelButton.setAttribute("aria-haspopup", "menu");
@@ -2591,12 +2918,18 @@ modelButton.setAttribute("aria-expanded", "false");
 loadPanelWidths();
 bindResizeHandle(leftResizeHandle, "left");
 bindResizeHandle(rightResizeHandle, "right");
+bindSessionSwipe();
 syncSidebarState();
 syncRightPanelState();
+renderSessionChrome();
+renderSessionCreatePage();
 loadBridgeInfo()
   .then(() => loadArtifacts())
   .then(() => loadThreads().catch(() => {}))
-  .then(connect)
+  .then(() => {
+    restoreActiveSessionFromStorage();
+    connect();
+  })
   .catch(() => {
     setRunState("error", "bridge情報を確認できません");
   });

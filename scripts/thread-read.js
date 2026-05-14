@@ -39,6 +39,7 @@ function clientCountForBridge(bridge) {
 }
 
 function liveThreadSummaries(bridges, options = {}) {
+  const sessionStateFor = typeof options.sessionStateFor === "function" ? options.sessionStateFor : () => null;
   const now = Number(options.now || Date.now());
   const rows = [];
   const seen = new Set();
@@ -52,7 +53,8 @@ function liveThreadSummaries(bridges, options = {}) {
     if (seen.has(key)) continue;
     seen.add(key);
 
-    const updatedAt = Number(bridge.updatedAt || bridge.createdAt || now);
+    const sessionState = sessionStateFor(id, cwd);
+    const updatedAt = Number(sessionState?.updatedAt || bridge.updatedAt || bridge.createdAt || now);
     rows.push({
       id,
       threadId: id,
@@ -61,6 +63,8 @@ function liveThreadSummaries(bridges, options = {}) {
       preview: previewFromHistory(bridge.history) || (bridge.ready ? "稼働中スレッド" : "起動中"),
       ready: !!bridge.ready,
       clients: clientCountForBridge(bridge),
+      status: sessionState?.status || (bridge.ready ? "input_ready" : "starting"),
+      sessionState,
       updatedAt,
       createdAt: Number(bridge.createdAt || updatedAt),
       source: "live-bridge",
@@ -96,11 +100,10 @@ function snapshotFromThread({ thread, threadId, historyFromThread }) {
   };
 }
 
-function sameHistory(left = [], right = []) {
-  return left.length === right.length && left.every((entry, index) => {
-    const other = right[index] || {};
-    return entry?.type === other.type && entry?.text === other.text;
-  });
+function historySignature(history = []) {
+  return history
+    .map((entry) => `${entry?.type || ""}:${entry?.text || ""}`)
+    .join("\n");
 }
 
 async function readThreadSnapshot({ threadId, liveBridge, request, model, workdir, historyFromThread, refreshLiveBridge = false }) {
@@ -127,11 +130,8 @@ async function readThreadSnapshot({ threadId, liveBridge, request, model, workdi
   }
 
   const refreshedSnapshot = snapshotFromThread({ thread, threadId, historyFromThread });
-  if (liveSnapshot) {
-    if (!refreshedSnapshot.history.length) return liveSnapshot;
-    if (refreshedSnapshot.history.length < liveSnapshot.history.length) return liveSnapshot;
-    if (sameHistory(refreshedSnapshot.history, liveSnapshot.history)) return liveSnapshot;
-  }
+  if (liveSnapshot && refreshedSnapshot.history.length < liveSnapshot.history.length) return liveSnapshot;
+  if (liveSnapshot && historySignature(refreshedSnapshot.history) === historySignature(liveSnapshot.history)) return liveSnapshot;
   return refreshedSnapshot;
 }
 

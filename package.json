@@ -7,10 +7,10 @@
   "scripts": {
     "version:codex": "codex --version",
     "help:remote-control": "codex remote-control --help",
-    "server:ws": "codex app-server --listen ws://127.0.0.1:45213",
+    "server:ws": "node scripts/start-codex-app-server.js",
     "probe:ws": "node scripts/probe-ws.js",
+    "postinstall": "node scripts/ensure-pty-helper-perms.js",
     "phone": "node scripts/start-phone.js",
-    "phone:claude": "PHONE_AGENT_PROVIDER=claude node scripts/start-phone.js",
     "build:ui": "node scripts/build-ui.mjs",
     "screenshots:readme": "node scripts/capture-readme-screenshots.js",
     "test": "node --test scripts/*.test.js",
@@ -38,7 +38,10 @@
   },
   "dependencies": {
     "@fortawesome/free-solid-svg-icons": "^7.2.0",
+    "@xterm/addon-fit": "^0.11.0",
+    "@xterm/xterm": "^6.0.0",
     "lucide-react": "^1.14.0",
+    "node-pty": "^1.1.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   }

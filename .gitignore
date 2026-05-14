@@ -2,6 +2,7 @@ AGENT.local.md
 .claude/
 node_modules/
 .codex-home*/
+.dual-agent-runs/
 schemas/
 docs/.vitepress/dist/
 docs/.vitepress/cache/

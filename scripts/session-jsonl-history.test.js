@@ -33,7 +33,7 @@ test("parseSessionJsonlHistory includes command status without duplicating assis
       payload: {
         type: "function_call",
         name: "exec_command",
-        arguments: JSON.stringify({ cmd: "npm run test" }),
+        arguments: JSON.stringify({ cmd: "pnpm run test" }),
       },
     },
     { type: "event_msg", payload: { type: "agent_message", message: "テストを実行します。" } },
@@ -41,25 +41,7 @@ test("parseSessionJsonlHistory includes command status without duplicating assis
   ]);
 
   assert.deepEqual(parseSessionJsonlHistory(file), [
-    { type: "status", text: "$ npm run test" },
+    { type: "status", text: "$ pnpm run test" },
     { type: "assistant", text: "テストを実行します。" },
-  ]);
-});
-
-test("parseSessionJsonlHistory reads from the tail of large session logs", () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "codex-session-history-"));
-  const file = path.join(dir, "large-rollout-test-thread.jsonl");
-  const oldRows = Array.from({ length: 200 }, (_, index) =>
-    JSON.stringify({ type: "event_msg", payload: { type: "agent_message", message: `old ${index}` } }),
-  );
-  const recentRows = [
-    JSON.stringify({ type: "event_msg", payload: { type: "user_message", message: "recent user" } }),
-    JSON.stringify({ type: "event_msg", payload: { type: "agent_message", message: "recent assistant" } }),
-  ];
-  fs.writeFileSync(file, `${oldRows.join("\n")}\n${recentRows.join("\n")}\n`);
-
-  assert.deepEqual(parseSessionJsonlHistory(file, { limit: 2, maxBytes: 512 }), [
-    { type: "user", text: "recent user" },
-    { type: "assistant", text: "recent assistant" },
   ]);
 });

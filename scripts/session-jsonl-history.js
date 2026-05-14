@@ -18,7 +18,8 @@ function payloadText(payload) {
 
 function commandText(payload) {
   if (payload?.type !== "function_call") return "";
-  if (!payload.name || payload.name !== "exec_command") return "";
+  if (!payload.name) return "";
+  if (payload.name !== "exec_command") return "";
   try {
     const args = JSON.parse(payload.arguments || "{}");
     return args.cmd ? `$ ${args.cmd}` : "";

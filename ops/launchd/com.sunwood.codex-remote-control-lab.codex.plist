@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>EnvironmentVariables</key>
+	<dict>
+		<key>PATH</key>
+		<string>/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+	</dict>
+	<key>KeepAlive</key>
+	<dict>
+		<key>SuccessfulExit</key>
+		<false/>
+	</dict>
+	<key>Label</key>
+	<string>com.sunwood.codex-remote-control-lab.codex</string>
+	<key>ProgramArguments</key>
+	<array>
+		<string>/bin/zsh</string>
+		<string>-lc</string>
+		<string>node scripts/start-codex-app-server.js</string>
+	</array>
+	<key>RunAtLoad</key>
+	<true/>
+	<key>StandardErrorPath</key>
+	<string>/path/to/codex-remote-control-lab/.logs/launchd-codex.err.log</string>
+	<key>StandardOutPath</key>
+	<string>/path/to/codex-remote-control-lab/.logs/launchd-codex.out.log</string>
+	<key>WorkingDirectory</key>
+	<string>/path/to/codex-remote-control-lab</string>
+</dict>
+</plist>
