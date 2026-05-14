@@ -988,6 +988,14 @@ function setReady(ready) {
   updateInterruptButton();
 }
 
+function showPendingApproval(approvalRequest) {
+  const request = approvalRequest || {};
+  pendingApproval = request;
+  setRunState("approval");
+  approvalText.textContent = JSON.stringify(request.params || {}, null, 2);
+  approval.classList.remove("hidden");
+}
+
 function renderHistory(history) {
   log.replaceChildren();
   statusGroup = null;
@@ -2125,6 +2133,9 @@ function connect() {
       renderHistoryIfChanged(msg.history || [], { threadId: readyThreadId });
       meta.textContent = `${msg.model}  •  ${msg.clients}端末  •  ${msg.workdir}`;
       setRunState(msg.run?.state || "ready", msg.run?.label);
+      if (Array.isArray(msg.pendingApprovals) && msg.pendingApprovals.length) {
+        showPendingApproval(msg.pendingApprovals[0]);
+      }
       addEntry("status", `共有${providerLabel(msg.provider || "codex")} thread ready: ${msg.threadId}`);
       return;
     }
@@ -2143,10 +2154,7 @@ function connect() {
       return;
     }
     if (msg.type === "approval") {
-      pendingApproval = msg.approval || msg.request;
-      setRunState("approval");
-      approvalText.textContent = JSON.stringify((msg.approval || msg.request).params || {}, null, 2);
-      approval.classList.remove("hidden");
+      showPendingApproval(msg.approval || msg.request);
       return;
     }
     if (msg.type === "approvalResolved") {

@@ -1669,9 +1669,7 @@ class SharedBridge {
         this.threadId = msg.result.thread.id;
         writeLastThreadId(this.threadId);
         writeLastThreadCwd(this.cwd);
-        if (this.requestedThreadId) {
-          threadCwdMap.set(this.threadId, this.cwd);
-        }
+        threadCwdMap.set(this.threadId, this.cwd);
         if (this.fellBackFromStaleThreadId) {
           const staleThreadId = this.fellBackFromStaleThreadId;
           this.fellBackFromStaleThreadId = "";
@@ -1976,15 +1974,182 @@ class SharedBridge {
   }
 }
 
+class ClaudeBridge {
+  constructor(requestedThreadId, bridgeKey, options = {}) {
+    this.requestedThreadId = requestedThreadId;
+    this.bridgeKey = bridgeKey;
+    this.cwd = options.cwd || workdir;
+    this.clients = new Set();
+    this.threadId = requestedThreadId || crypto.randomUUID();
+    this.activeTurnId = null;
+    this.ready = true;
+    this.startupFailed = false;
+    this.history = requestedThreadId ? claudeHistoryForSession(requestedThreadId) : [];
+    this.turnQueue = [];
+    this.child = null;
+    this.runState = { state: "ready", label: "待機中", turnId: null, updatedAt: Date.now() };
+    process.nextTick(() => {
+      this.emit("ready", this.readyPayload());
+      if (!requestedThreadId) this.emit("status", { text: `新しいClaude sessionを開始しました: ${this.threadId}` });
+    });
+  }
+
+  addClient(browser) {
+    this.clients.add(browser);
+    this.emitTo(browser, "status", { text: "共有Claudeブリッジに参加しました。" });
+    this.emitTo(browser, "ready", this.readyPayload());
+    browser.on("close", () => {
+      this.clients.delete(browser);
+      if (shouldDisposeIdleBridge({ clientCount: this.clients.size, ready: this.ready })) {
+        if (this.child && !this.child.killed) this.child.kill("SIGTERM");
+        bridges.delete(this.bridgeKey);
+      }
+    });
+  }
+
+  readyPayload() {
+    return {
+      provider: agentProvider,
+      threadId: this.threadId,
+      model,
+      workdir: this.cwd,
+      ...currentWorkspaceMeta(),
+      shared: true,
+      clients: this.clients.size,
+      history: this.history,
+      pendingApprovals: [],
+      run: this.runPayload(),
+    };
+  }
+
+  runPayload() {
+    return this.runState;
+  }
+
+  setBridgeRunState(state, label, turnId = this.activeTurnId) {
+    this.runState = { state, label, turnId: turnId || null, updatedAt: Date.now() };
+    this.emit("runState", { run: this.runPayload() });
+  }
+
+  emit(type, payload = {}) {
+    const body = JSON.stringify({ type, ...payload });
+    for (const client of this.clients) {
+      if (client.readyState === WebSocket.OPEN) client.send(body);
+    }
+  }
+
+  emitTo(client, type, payload = {}) {
+    if (client.readyState === WebSocket.OPEN) client.send(JSON.stringify({ type, ...payload }));
+  }
+
+  prompt(text, attachments = [], options = {}) {
+    if (this.child || this.activeTurnId) {
+      this.turnQueue.push({ text, attachments, options });
+      this.emit("status", { text: `キューに追加しました（${this.turnQueue.length}件待機）` });
+      return;
+    }
+    this.startPrompt(text, attachments, options);
+  }
+
+  startPrompt(text, attachments = [], options = {}) {
+    const savedAttachments = [];
+    for (const attachment of attachments || []) {
+      const saved = saveDataUrlAttachment(attachment);
+      if (saved) savedAttachments.push({ ...saved.preview, absolutePath: saved.input.path });
+    }
+    const promptText = summarizeClaudeAttachmentPrompt(text, savedAttachments);
+    const displayText = savedAttachments.length ? `${text}\n\n添付: ${savedAttachments.map((file) => file.name).join(", ")}` : text;
+    this.history = capHistory([...this.history, { type: "user", text: displayText, attachments: savedAttachments }]);
+    this.emit("user", { text: displayText, attachments: savedAttachments });
+    this.activeTurnId = crypto.randomUUID();
+    this.setBridgeRunState("running", "Claude 処理中", this.activeTurnId);
+
+    const args = ["-p", promptText];
+    if (this.requestedThreadId) args.unshift("--resume", this.requestedThreadId);
+    const permissionMode = claudePermissionMode(options);
+    if (permissionMode) args.unshift("--permission-mode", permissionMode);
+    const child = spawn(claudeBin, args, {
+      cwd: this.cwd,
+      env: {
+        ...process.env,
+        CLAUDE_PROJECT_DIR: claudeProjectDirFor(this.cwd),
+      },
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    this.child = child;
+    let stdout = "";
+    let stderr = "";
+    child.stdout.on("data", (chunk) => {
+      const textChunk = chunk.toString();
+      stdout += textChunk;
+      this.setBridgeRunState("streaming", "回答生成中", this.activeTurnId);
+      this.emit("assistantDelta", { text: textChunk });
+    });
+    child.stderr.on("data", (chunk) => {
+      stderr += chunk.toString();
+    });
+    child.on("error", (error) => {
+      this.child = null;
+      this.activeTurnId = null;
+      this.setBridgeRunState("error", "Claude起動エラー");
+      this.emit("error", { text: error.message });
+      this.startNextQueuedTurn();
+    });
+    child.on("close", (code) => {
+      this.child = null;
+      const completedTurnId = this.activeTurnId;
+      this.activeTurnId = null;
+      const output = stripUiDirectives(stdout.trim());
+      if (output) this.history = capHistory([...this.history, { type: "assistant", text: output }]);
+      if (code === 0) {
+        this.setBridgeRunState("done", "完了しました", completedTurnId);
+        this.emit("turn", { status: "completed", turnId: completedTurnId, run: this.runPayload() });
+      } else {
+        this.setBridgeRunState("error", "Claude実行エラー", completedTurnId);
+        this.emit("error", { text: (stderr || `Claude exited with code ${code}`).trim() });
+      }
+      this.startNextQueuedTurn();
+    });
+  }
+
+  startNextQueuedTurn() {
+    if (this.child || this.activeTurnId || !this.turnQueue.length) return;
+    const next = this.turnQueue.shift();
+    this.emit("status", { text: `キューから送信中（残り${this.turnQueue.length}件）` });
+    this.startPrompt(next.text, next.attachments, next.options);
+  }
+
+  interrupt() {
+    const queuedCount = this.turnQueue.length;
+    this.turnQueue = [];
+    if (queuedCount) this.emit("status", { text: `待機中の送信を破棄しました（${queuedCount}件）。` });
+    if (this.child && !this.child.killed) {
+      this.child.kill("SIGTERM");
+      this.setBridgeRunState("interrupting", "中断中", this.activeTurnId);
+      return;
+    }
+    this.emit("status", { text: "中断できる処理はありません。" });
+  }
+
+  approval() {
+    this.emit("status", { text: "Claude providerでは承認UIは未使用です。" });
+  }
+}
+
 const threadCwdMap = new Map();
+
+function bridgeClassForProvider(provider = agentProvider) {
+  return provider === "claude" ? ClaudeBridge : SharedBridge;
+}
 
 function getBridge(threadId, connectionId = crypto.randomUUID(), options = {}) {
   const savedCwd = readLastThreadCwd();
   const persistedThreadId = !threadId && !options.forceNew && savedCwd === workdir ? readLastThreadId() : "";
+  const BridgeClass = bridgeClassForProvider();
   const requestedThreadId = options.forceNew ? "" : threadId || persistedThreadId;
   if (!threadId && persistedThreadId) {
     if (bridges.has(persistedThreadId)) return bridges.get(persistedThreadId);
-    const bridge = new SharedBridge(persistedThreadId, persistedThreadId, { fallbackOnMissingThread: true, cwd: workdir });
+    const bridge = new BridgeClass(persistedThreadId, persistedThreadId, { fallbackOnMissingThread: true, cwd: workdir });
     bridges.set(persistedThreadId, bridge);
     return bridge;
   }
@@ -1995,7 +2160,7 @@ function getBridge(threadId, connectionId = crypto.randomUUID(), options = {}) {
   }
   const key = options.forceNew && !requestedThreadId ? `new:${connectionId}` : bridgeKeyForRequest(requestedThreadId, connectionId);
   const cwd = options.cwd || (requestedThreadId ? threadCwdMap.get(requestedThreadId) : undefined) || workdir;
-  if (!bridges.has(key)) bridges.set(key, new SharedBridge(requestedThreadId, key, { cwd }));
+  if (!bridges.has(key)) bridges.set(key, new BridgeClass(requestedThreadId, key, { cwd }));
   return bridges.get(key);
 }
 
@@ -2419,6 +2584,7 @@ if (require.main === module) {
   });
 } else {
   module.exports = {
+    bridgeClassForProvider,
     decorateReviewFiles,
     discoverWorkspaceEntries,
     installedLocalSkillEntries,

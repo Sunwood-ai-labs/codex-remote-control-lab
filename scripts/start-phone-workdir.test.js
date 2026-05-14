@@ -12,6 +12,7 @@ process.env.CODEX_WORKDIR = workdir;
 process.env.CODEX_HOME = path.join(tempRoot, "codex-home");
 
 const {
+  bridgeClassForProvider,
   clearLastThreadId,
   discoverWorkspaceEntries,
   installedLocalSkillEntries,
@@ -119,6 +120,18 @@ test("upstream disconnect cleanup preserves queued turns instead of restarting o
   assert.match(source, /finishInterruptedTurn\(error\.message,\s*\{\s*restartQueued:\s*false\s*\}\)/);
   assert.match(source, /finishInterruptedTurn\(reason,\s*\{\s*restartQueued\s*=\s*true\s*\}\s*=\s*\{\s*\}\)/);
   assert.match(source, /if \(restartQueued\) this\.startNextQueuedTurn\(\);/);
+});
+
+test("bridge selection keeps Claude provider off the Codex app-server bridge", () => {
+  assert.equal(bridgeClassForProvider("codex").name, "SharedBridge");
+  assert.equal(bridgeClassForProvider("claude").name, "ClaudeBridge");
+});
+
+test("newly created threads persist their cwd mapping for explicit reconnects", () => {
+  const source = fs.readFileSync(path.join(__dirname, "start-phone.js"), "utf8");
+
+  assert.match(source, /threadCwdMap\.set\(this\.threadId,\s*this\.cwd\);/);
+  assert.doesNotMatch(source, /if \(this\.requestedThreadId\)\s*\{\s*threadCwdMap\.set\(this\.threadId,\s*this\.cwd\);/);
 });
 
 test("safeDirectoryPath and readDirectoryListing stay inside the provided root", () => {

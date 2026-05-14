@@ -248,6 +248,64 @@ test("background thread polling stays quiet after browser bridge disconnects", a
   assert.equal(await page.locator("#runState").getAttribute("data-state"), "disconnected");
 });
 
+test("ready payload rehydrates pending approval dialog after reconnect", async (t) => {
+  const server = await startStaticServer();
+  let browser;
+  t.after(async () => {
+    if (browser) await browser.close();
+    await server.close();
+  });
+
+  browser = await chromium.launch();
+  const page = await browser.newPage({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 1 });
+  await mockApi(page);
+  await mockWebSocket(page, {
+    defaultReadyPayload: {
+      type: "ready",
+      threadId: "approval-thread",
+      history: [],
+      model: "gpt-5.5",
+      clients: 1,
+      workdir: root,
+      run: { state: "approval", label: "承認待ち" },
+      pendingApprovals: [
+        {
+          approvalId: "approval-thread:7",
+          threadId: "approval-thread",
+          turnId: "turn-1",
+          method: "item/commandExecution/requestApproval",
+          kind: "commandExecution",
+          params: { command: "date" },
+          createdAt: Date.now(),
+        },
+      ],
+    },
+  });
+  await page.goto(`${server.origin}/?token=${token}`, { waitUntil: "networkidle" });
+
+  await page.locator("#approval:not(.hidden)").waitFor();
+  assert.equal(await page.locator("#runState").getAttribute("data-state"), "approval");
+  assert.match(await page.locator("#approvalText").innerText(), /date/);
+
+  await page.locator("#approve").click();
+  const sentFrames = await page.evaluate(() => window.__sentFrames);
+  assert.deepEqual(sentFrames.at(-1), {
+    type: "approval",
+    token,
+    decision: "accept",
+    approvalId: "approval-thread:7",
+    request: {
+      approvalId: "approval-thread:7",
+      threadId: "approval-thread",
+      turnId: "turn-1",
+      method: "item/commandExecution/requestApproval",
+      kind: "commandExecution",
+      params: { command: "date" },
+      createdAt: sentFrames.at(-1).request.createdAt,
+    },
+  });
+});
+
 test("thread list shows only active live threads for Codex", async (t) => {
   const server = await startStaticServer();
   let browser;
