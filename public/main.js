@@ -603,9 +603,12 @@ function renderOpenSessionList() {
     card.type = "button";
     card.className = "session-card";
     card.innerHTML = `
-      <span class="session-card-title">${escapeHtml(session.title || basenameForPath(session.cwd))}</span>
-      <span class="session-card-path">${escapeHtml(displayPath(session.cwd) || "cwd未設定")}</span>
-      <span class="session-card-meta">${escapeHtml(session.status || "ready")} · ${escapeHtml(shortSessionPath(session.cwd))}</span>
+      <span class="session-card-icon open-session-icon" aria-hidden="true">${fontAwesomeIcon("folder", "project-icon")}</span>
+      <span class="session-card-main">
+        <span class="session-card-title">${escapeHtml(session.title || basenameForPath(session.cwd))}</span>
+        <span class="session-card-path">${escapeHtml(displayPath(session.cwd) || "cwd未設定")}</span>
+        <span class="session-card-meta">${escapeHtml(session.status || "ready")} · ${escapeHtml(shortSessionPath(session.cwd))}</span>
+      </span>
     `;
     const close = document.createElement("button");
     close.type = "button";

@@ -34,6 +34,8 @@ test("Shell renders chat/terminal mode controls on the same remote session surfa
   assert.ok(shell.indexOf("id=\"sessionDirectorySearch\"") < shell.indexOf("session-browser-section"));
   assert.match(shell, /id="sessionSwitcherOverlay"/);
   assert.match(shell, /id="openSessionList"/);
+  assert.match(shell, /<h2>Sessions<\/h2>/);
+  assert.match(shell, /新しいセッション/);
   assert.match(shell, /className="mobile-toggle side-menu-button"/);
   assert.match(shell, /className="titlebar-main"/);
   assert.match(shell, /className="pathbar"/);
@@ -78,6 +80,8 @@ test("browser logic attaches terminal mode to the selected Codex thread through 
   assert.match(main, /function showTerminalCopyFallback\(text\)/);
   assert.match(main, /terminal-copy-textarea/);
   assert.match(main, /const openSessionsStorageKey = "codexRemoteOpenSessions"/);
+  assert.match(main, /class="session-card-icon open-session-icon"/);
+  assert.match(main, /<span class="session-card-main">[\s\S]*<span class="session-card-title">/);
   assert.match(main, /const activeSessionStorageKey = "codexRemoteLastActiveSessionKey"/);
   assert.match(main, /const closedThreadIdsStorageKey = "codexRemoteClosedThreadIds"/);
   assert.match(main, /function rememberClosedThread\(threadId\)/);
@@ -233,6 +237,9 @@ test("terminal mode is hidden until selected and uses native terminal viewport",
   assert.match(css, /\.session-selected-section \.session-cwd-card \.session-card-main > span \{[\s\S]*overflow: visible;[\s\S]*text-overflow: clip;[\s\S]*white-space: normal;[\s\S]*overflow-wrap: anywhere;/);
   assert.match(css, /\.session-create-footer \{/);
   assert.match(css, /\.session-switcher-overlay \{/);
+  assert.match(css, /\.session-switcher-panel \{[\s\S]*width: min\(560px, 100%\);[\s\S]*font-family: inherit;/);
+  assert.match(css, /\.session-switcher-panel \.session-card \{[\s\S]*grid-template-columns: 28px minmax\(0, 1fr\);/);
+  assert.match(css, /\.session-switcher-panel \.session-card-path,[\s\S]*\.session-switcher-panel \.session-card-meta \{[\s\S]*font-family: inherit;/);
   assert.match(css, /\.session-card-row \{/);
   assert.match(css, /\.session-start-button \{/);
   assert.match(css, /\.title-identity \{/);

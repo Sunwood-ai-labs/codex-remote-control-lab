@@ -409,12 +409,12 @@ function SessionSwitcherOverlay() {
         <div className="session-switcher-header">
           <div>
             <p className="session-create-eyebrow">Open sessions</p>
-            <h2>Swipe targets</h2>
+            <h2>Sessions</h2>
           </div>
           <button type="button" className="icon-button" id="sessionSwitcherClose" aria-label="セッション一覧を閉じる"><X size={16} strokeWidth={2} /></button>
         </div>
         <div className="session-card-list" id="openSessionList" />
-        <button type="button" className="session-start-button" id="sessionSwitcherNew">New session</button>
+        <button type="button" className="session-start-button" id="sessionSwitcherNew">新しいセッション</button>
       </div>
     </section>
   );

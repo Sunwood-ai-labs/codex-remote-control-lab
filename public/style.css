@@ -1566,6 +1566,132 @@ p {
   font-size: 18px;
 }
 
+.session-switcher-overlay {
+  padding-top: max(76px, env(safe-area-inset-top));
+  background:
+    radial-gradient(circle at 52% 0%, color-mix(in srgb, var(--accent) 10%, transparent), transparent 34%),
+    linear-gradient(180deg, color-mix(in srgb, var(--bg) 72%, transparent), color-mix(in srgb, var(--bg) 92%, transparent));
+}
+
+.session-switcher-panel {
+  gap: 10px;
+  width: min(560px, 100%);
+  border-radius: 10px;
+  padding: 12px;
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--surface-raised) 12%, transparent), transparent),
+    color-mix(in srgb, var(--card) 92%, transparent);
+  box-shadow:
+    0 18px 46px color-mix(in srgb, #000000 38%, transparent),
+    inset 0 1px 0 color-mix(in srgb, var(--surface-raised) 22%, transparent);
+  backdrop-filter: blur(18px);
+  font-family: inherit;
+}
+
+.session-switcher-header {
+  align-items: center;
+  padding: 0 2px 2px;
+}
+
+.session-switcher-header .session-create-eyebrow {
+  margin-bottom: 3px;
+  color: color-mix(in srgb, var(--muted) 84%, var(--text));
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.session-switcher-header h2 {
+  font-size: 16px;
+  font-weight: 760;
+  line-height: 1.15;
+}
+
+.session-switcher-panel .session-card-list {
+  gap: 6px;
+  max-height: min(52vh, 420px);
+  overflow-y: auto;
+  padding-right: 1px;
+}
+
+.session-switcher-panel .session-card-row {
+  grid-template-columns: minmax(0, 1fr) 30px;
+  gap: 6px;
+}
+
+.session-switcher-panel .session-card {
+  grid-template-columns: 28px minmax(0, 1fr);
+  min-height: 54px;
+  gap: 9px;
+  border-radius: 8px;
+  padding: 8px 9px;
+  background: color-mix(in srgb, var(--field) 74%, transparent);
+}
+
+.session-switcher-panel .session-card:hover {
+  border-color: color-mix(in srgb, var(--accent) 36%, var(--line));
+  background: color-mix(in srgb, var(--accent) 7%, var(--field));
+}
+
+.session-switcher-panel .session-card-row.active .session-card {
+  border-color: color-mix(in srgb, var(--accent) 58%, var(--line));
+  background:
+    linear-gradient(90deg, color-mix(in srgb, var(--accent) 13%, transparent), transparent 48%),
+    color-mix(in srgb, var(--field) 86%, transparent);
+  box-shadow: inset 3px 0 0 color-mix(in srgb, var(--accent) 82%, var(--text));
+}
+
+.session-switcher-panel .open-session-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  color: color-mix(in srgb, var(--accent) 72%, var(--text));
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+
+.session-switcher-panel .session-card-title {
+  color: color-mix(in srgb, var(--text) 92%, var(--muted));
+  font-size: 13px;
+  font-weight: 720;
+  line-height: 1.2;
+}
+
+.session-switcher-panel .session-card-path,
+.session-switcher-panel .session-card-meta {
+  font-family: inherit;
+  font-size: 11px;
+  line-height: 1.25;
+}
+
+.session-switcher-panel .session-card-meta {
+  color: color-mix(in srgb, var(--muted) 76%, var(--text));
+}
+
+.session-switcher-panel .session-card-close {
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--field) 72%, transparent);
+  color: color-mix(in srgb, var(--muted) 76%, var(--text));
+  font-size: 16px;
+  line-height: 1;
+}
+
+.session-switcher-panel .session-card-close:hover {
+  border-color: color-mix(in srgb, var(--error) 34%, var(--line));
+  color: color-mix(in srgb, var(--error) 70%, var(--text));
+  background: color-mix(in srgb, var(--error) 9%, var(--field));
+}
+
+.session-switcher-panel .session-start-button {
+  min-height: 34px;
+  border-radius: 8px;
+  padding: 0 12px;
+  background: color-mix(in srgb, var(--accent) 9%, var(--field));
+  color: color-mix(in srgb, var(--text) 88%, var(--accent));
+  font-size: 13px;
+  font-weight: 720;
+  text-align: center;
+}
+
 .session-empty {
   border: 1px dashed var(--line);
   border-radius: 10px;
