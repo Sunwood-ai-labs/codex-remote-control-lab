@@ -1,6 +1,8 @@
 const fs = require("fs");
 const path = require("path");
 
+const extensionCache = new Map();
+
 const builtInSlashCommands = [
   {
     name: "compact",
@@ -82,10 +84,21 @@ function isAllowedExtensionCommand(command) {
 function readSlashCommandExtensions(root, env = process.env) {
   const configuredPath = env.PHONE_SLASH_COMMANDS_FILE || path.join(root, "slash-commands.local.json");
   try {
-    if (!fs.existsSync(configuredPath)) return [];
+    if (!fs.existsSync(configuredPath)) {
+      extensionCache.delete(configuredPath);
+      return [];
+    }
+    const stat = fs.statSync(configuredPath);
+    const cached = extensionCache.get(configuredPath);
+    if (cached && cached.mtimeMs === stat.mtimeMs && cached.size === stat.size) return cached.commands;
     const parsed = JSON.parse(fs.readFileSync(configuredPath, "utf8"));
-    if (!Array.isArray(parsed)) return [];
-    return parsed.map(normalizeCommand).filter(isAllowedExtensionCommand);
+    if (!Array.isArray(parsed)) {
+      extensionCache.set(configuredPath, { mtimeMs: stat.mtimeMs, size: stat.size, commands: [] });
+      return [];
+    }
+    const commands = parsed.map(normalizeCommand).filter(isAllowedExtensionCommand);
+    extensionCache.set(configuredPath, { mtimeMs: stat.mtimeMs, size: stat.size, commands });
+    return commands;
   } catch {
     return [];
   }

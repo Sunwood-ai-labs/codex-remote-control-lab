@@ -138,9 +138,9 @@ test("slash command app-server turns stay active after request acknowledgement",
   const source = fs.readFileSync(path.join(__dirname, "start-phone.js"), "utf8");
 
   assert.match(source, /if \(pendingMethod === "thread\/compact\/start" \|\| pendingMethod === "thread\/shellCommand"\)/);
-  assert.match(source, /this\.setBridgeRunState\("running", pendingMethod === "thread\/compact\/start" \? "Compaction 実行中" : "Shell command 実行中", this\.activeTurnId\);/);
+  assert.match(source, /this\.setBridgeRunState\("running", pendingMethod === "thread\/compact\/start" \? "Compaction 実行中" : "シェルコマンド実行中", this\.activeTurnId\);/);
   assert.match(source, /this\.activeTurnId = crypto\.randomUUID\(\);\s*this\.setBridgeRunState\("running", "Compaction 実行中", this\.activeTurnId\);/);
-  assert.match(source, /this\.activeTurnId = crypto\.randomUUID\(\);\s*this\.setBridgeRunState\("running", "Shell command 実行中", this\.activeTurnId\);/);
+  assert.match(source, /this\.activeTurnId = crypto\.randomUUID\(\);\s*this\.setBridgeRunState\("running", "シェルコマンド実行中", this\.activeTurnId\);/);
 });
 
 test("safeDirectoryPath and readDirectoryListing stay inside the provided root", () => {
