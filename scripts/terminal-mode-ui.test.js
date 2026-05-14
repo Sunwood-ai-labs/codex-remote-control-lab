@@ -86,6 +86,9 @@ test("browser logic attaches terminal mode to the selected Codex thread through 
   assert.match(main, /apiGet\("\/api\/threads"\)/);
   assert.match(main, /apiGet\("\/api\/live-threads"\)/);
   assert.match(main, /function mergeThreadRows\(historyRows = \[\], liveRows = \[\]\)/);
+  assert.match(main, /project-heading-live/);
+  assert.match(main, /project-live-badge/);
+  assert.match(main, /thread-live-dot/);
   assert.match(main, /一覧にないthreadの履歴表示を停止しました/);
   assert.match(main, /function syncOpenSessionsFromThreads\(threads = threadCache\)/);
   assert.match(main, /closedThreadIds\.has\(thread\.id\)/);

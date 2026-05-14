@@ -1288,24 +1288,34 @@ function renderThreadList() {
   }
 
   for (const [project, threads] of groups) {
+    const hasLiveThread = threads.some((thread) => thread.live);
     const group = document.createElement("section");
-    group.className = "project-group";
+    group.className = hasLiveThread ? "project-group has-live-thread" : "project-group";
 
     const heading = document.createElement("div");
-    heading.className = "project-heading";
+    heading.className = hasLiveThread ? "project-heading project-heading-live" : "project-heading";
     const folder = document.createElement("span");
     folder.className = "project-icon-slot";
     folder.innerHTML = fontAwesomeIcon("folder", "project-icon");
     const name = document.createElement("span");
     name.textContent = project;
     heading.append(folder, name);
+    if (hasLiveThread) {
+      const badge = document.createElement("span");
+      badge.className = "project-live-badge";
+      badge.textContent = "LIVE";
+      heading.appendChild(badge);
+    }
     group.appendChild(heading);
 
     const visibleThreads = threads.slice(0, 6);
     for (const thread of visibleThreads) {
       const item = document.createElement("button");
       item.type = "button";
-      item.className = thread.id === selectedThread ? "thread-item active" : "thread-item";
+      const itemClasses = ["thread-item"];
+      if (thread.id === selectedThread) itemClasses.push("active");
+      if (thread.live) itemClasses.push("live");
+      item.className = itemClasses.join(" ");
       item.title = titleForThread(thread);
       const title = document.createElement("span");
       title.className = "thread-title";
@@ -1313,6 +1323,12 @@ function renderThreadList() {
       const time = document.createElement("span");
       time.className = "thread-time";
       time.textContent = formatRelativeTime(thread.updatedAt || thread.createdAt);
+      if (thread.live) {
+        const liveDot = document.createElement("span");
+        liveDot.className = "thread-live-dot";
+        liveDot.setAttribute("aria-label", "稼働中");
+        item.append(liveDot);
+      }
       item.append(title, time);
       item.addEventListener("click", () => selectThread(thread.id));
       group.appendChild(item);

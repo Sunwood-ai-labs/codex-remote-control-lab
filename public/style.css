@@ -719,7 +719,7 @@ body.resizing-sidebar .sidebar-resize-handle::before {
 
 .project-heading {
   display: grid;
-  grid-template-columns: 20px minmax(0, 1fr);
+  grid-template-columns: 20px minmax(0, 1fr) auto;
   align-items: center;
   gap: 8px;
   width: 100%;
@@ -734,11 +734,34 @@ body.resizing-sidebar .sidebar-resize-handle::before {
   font-weight: 450;
 }
 
-.project-heading > span:last-child {
+.project-heading > span:nth-child(2) {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.project-heading-live {
+  color: color-mix(in srgb, #0d8f63 78%, var(--muted));
+}
+
+.project-heading-live .project-icon-slot {
+  color: #0d8f63;
+}
+
+.project-live-badge {
+  display: inline-grid;
+  place-items: center;
+  min-width: 34px;
+  height: 18px;
+  border: 1px solid color-mix(in srgb, #0d8f63 48%, var(--line));
+  border-radius: 999px;
+  padding: 0 7px;
+  background: color-mix(in srgb, #0d8f63 12%, transparent);
+  color: color-mix(in srgb, #0d8f63 82%, var(--text));
+  font-size: 9px;
+  font-weight: 740;
+  letter-spacing: 0;
 }
 
 button.project-heading:hover,
@@ -777,14 +800,39 @@ button.project-heading.active {
   text-align: left;
 }
 
+.thread-item.live {
+  grid-template-columns: 8px minmax(0, 1fr) auto;
+  padding-left: 28px;
+  color: color-mix(in srgb, #0d8f63 72%, var(--nav-muted));
+  background: color-mix(in srgb, #0d8f63 7%, transparent);
+  box-shadow: inset 3px 0 0 color-mix(in srgb, #0d8f63 62%, transparent);
+}
+
 .thread-item:hover,
 .thread-item.active {
   background: var(--hover);
 }
 
+.thread-item.live:hover,
+.thread-item.live.active {
+  background: color-mix(in srgb, #0d8f63 12%, var(--hover));
+}
+
 .thread-item.active {
   color: var(--text);
   font-weight: 560;
+}
+
+.thread-item.live.active {
+  color: color-mix(in srgb, #0d8f63 72%, var(--text));
+}
+
+.thread-live-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: #0d8f63;
+  box-shadow: 0 0 0 3px color-mix(in srgb, #0d8f63 18%, transparent);
 }
 
 .thread-title {
