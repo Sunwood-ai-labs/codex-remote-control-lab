@@ -40,6 +40,12 @@ npm ci
 npm run phone
 ```
 
+To run the same browser bridge UI against Claude Code instead of Codex, use the experimental provider:
+
+```bash
+npm run phone:claude
+```
+
 The command prints a URL like this:
 
 ```text
@@ -101,9 +107,13 @@ Useful environment variables:
 PHONE_UI_PORT=45214
 CODEX_WORKDIR=/Users/admin/Prj/some-project
 CODEX_MODEL=gpt-5.4
+PHONE_AGENT_PROVIDER=codex
+CLAUDE_WORKDIR=/Users/admin/Prj/some-project
+CLAUDE_MODEL=sonnet
 CODEX_APP_SERVER_SOCK=/Users/admin/.codex/app-server-control/app-server-control.sock
 CODEX_APP_SERVER_URL=ws://127.0.0.1:45213
 CODEX_HISTORY_SYNC=1
+PHONE_CODEX_RATE_LIMIT_REFRESH_COMMAND="node scripts/read-desktop-rate-limits.js"
 PHONE_TOKEN=choose-your-own-token
 PHONE_DEBUG_NO_TOKEN=1
 PHONE_DEBUG_BIND=lan
@@ -120,7 +130,11 @@ See [.env.example](.env.example) for a public-safe template.
 
 History sync is enabled by default. After a web turn completes, the bridge warms the app-server history with `thread/read` and a scan-backed `thread/list`, and `/api/threads` also avoids state-DB-only listing. This helps Codex Desktop discover the updated session after reopening or refreshing the thread. It does not inject live updates into an already-open normal Desktop conversation view. Set `CODEX_HISTORY_SYNC=0` to disable the extra history refresh calls.
 
-Startup notifications are opt-in. `PHONE_NTFY_TOPIC` sends the bridge URLs to an ntfy topic, `PHONE_PUSHOVER_TOKEN` plus `PHONE_PUSHOVER_USER` sends them through Pushover, and `PHONE_DISCORD_WEBHOOK_URL` posts them to Discord. `npm run phone` loads local `.env` values before reading these variables. `PHONE_NTFY_SERVER` defaults to `https://ntfy.sh` and must use HTTPS. The notification body includes the tokenized bridge URL, so use a private/protected topic, account, or channel and keep these values in local environment variables.
+`npm run phone:claude` sets `PHONE_AGENT_PROVIDER=claude`, starts per-turn `claude -p --output-format stream-json` processes, and reads same-workdir Claude Code JSONL sessions for the sidebar. Codex-only app-server plugin lookup, live approval callbacks, and history sync stay disabled in Claude mode.
+
+Codex rate-limit display is optional. Set `PHONE_CODEX_RATE_LIMIT_REFRESH_COMMAND="node scripts/read-desktop-rate-limits.js"` to read local Codex auth, call the usage endpoint, normalize remaining percentage/reset metadata, and cache only the display snapshot in `.phone-rate-limits.json`.
+
+Notifications are opt-in. `PHONE_NTFY_TOPIC` sends bridge events to an ntfy topic, `PHONE_PUSHOVER_TOKEN` plus `PHONE_PUSHOVER_USER` sends them through Pushover, and `PHONE_DISCORD_WEBHOOK_URL` posts them to Discord. Startup notifications include the ready URLs, and task notifications fire on completion, failure, and approval requests. `npm run phone` loads local `.env` values before reading these variables. `PHONE_NTFY_SERVER` defaults to `https://ntfy.sh` and must use HTTPS. Notification bodies can include tokenized bridge URLs, so use a private/protected topic, account, or channel and keep these values in local environment variables.
 
 Tokenless debug mode intentionally skips startup notifications. If you manually send a `PHONE_DEBUG_NO_TOKEN=1` plus `PHONE_DEBUG_BIND=lan` URL to Discord, treat that channel as private and trusted: anyone who can open the URL on the LAN can operate the bridge without a token.
 
@@ -129,7 +143,12 @@ The current phone bridge supports:
 - Codex Desktop-like browser layout with a left thread sidebar, central conversation, right artifact panel, and bottom composer
 - recent thread listing and direct thread resume
 - default history-sync refresh for Desktop reopen/refresh continuity
+- experimental Claude provider mode through `npm run phone:claude`
+- optional Codex rate-limit status display through a local refresh command
+- mobile slash command completion for installed skills
+- mobile-safe artifact card opening from chat and review digest cards
 - plugin, model, config/auth, and automation status panels
+- run-state interrupt, reconnect, completion, failure, and approval indicators
 - approval and sandbox mode controls for the next turn
 - Markdown rendering in chat and artifact previews
 - Markdown image links rendered inline where possible
@@ -241,10 +260,11 @@ See [SECURITY.md](SECURITY.md) for the public-safe checklist.
 
 - [English docs](https://sunwood-ai-labs.github.io/codex-remote-control-lab/)
 - [日本語ドキュメント](https://sunwood-ai-labs.github.io/codex-remote-control-lab/ja/)
-- [v0.3.0 release notes](https://sunwood-ai-labs.github.io/codex-remote-control-lab/guide/releases/v0.3.0)
+- [v0.4.0 release notes](https://sunwood-ai-labs.github.io/codex-remote-control-lab/guide/releases/v0.4.0)
 - [Phone bridge guide](docs/guide/phone-bridge.md)
 - [Protocol notes](docs/guide/protocol.md)
 - [Security model](docs/guide/security.md)
+- [Contributing and upstream PRs](docs/guide/contributing.md)
 
 ## 🗂️ Repository Layout
 

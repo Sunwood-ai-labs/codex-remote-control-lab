@@ -8,6 +8,7 @@ import {
   FolderOpen,
   GitBranch,
   Globe2,
+  Maximize2,
   Mic,
   MoreHorizontal,
   PanelLeft,
@@ -143,6 +144,9 @@ function Composer() {
       <div className="composer-footer">
         <div className="composer-left">
           <button type="button" className="ghost-button icon-only" id="addButton" aria-label="画像を添付"><Plus size={18} strokeWidth={1.9} /></button>
+          <button type="button" className="ghost-button icon-only expand-button" id="expandPromptButton" title="入力欄を拡大" aria-label="入力欄を拡大">
+            <Maximize2 size={17} strokeWidth={1.9} aria-hidden="true" />
+          </button>
           <button type="button" className="access-button" id="accessButton">
             <span className="access-label">フルアクセス</span>
             <FaIcon icon={faChevronDown} className="button-chevron-icon" />
@@ -154,11 +158,48 @@ function Composer() {
             <FaIcon icon={faChevronDown} className="button-chevron-icon" />
           </button>
           <button type="button" className="voice-button" id="voiceButton" title="音声入力" aria-label="音声入力"><Mic size={18} strokeWidth={1.9} /></button>
+          <button type="button" className="interrupt-button hidden" id="interruptRun" title="現在の処理を中断" aria-label="現在の処理を中断">
+            <span className="interrupt-icon" aria-hidden="true"></span>
+            <span className="interrupt-label">中断</span>
+          </button>
           <button id="send" type="submit" className="send-button" title="送信" aria-label="送信"><Send size={18} strokeWidth={2.2} /></button>
         </div>
       </div>
       <ModelMenu />
     </form>
+  );
+}
+
+function PromptModal() {
+  return (
+    <section className="prompt-modal hidden" id="promptModal" role="dialog" aria-modal="true" aria-labelledby="promptModalTitle">
+      <div className="prompt-modal-card">
+        <header className="prompt-modal-header">
+          <h2 id="promptModalTitle">入力を編集</h2>
+          <button type="button" className="prompt-modal-close" id="closePromptModalButton" aria-label="閉じる"><X size={17} strokeWidth={2} /></button>
+        </header>
+        <textarea id="promptModalInput" className="prompt-modal-input" placeholder="フォローアップの変更を求める" aria-label="拡大した入力欄" />
+        <footer className="prompt-modal-footer">
+          <button type="button" className="secondary" id="cancelPromptModalButton">キャンセル</button>
+          <button type="button" id="applyPromptModalButton">反映</button>
+        </footer>
+      </div>
+    </section>
+  );
+}
+
+function WorkspaceStrip() {
+  return (
+    <div id="workspaceIndicator" className="workspace-strip empty" aria-label="現在のワークスペース">
+      <div className="workspace-place">
+        <span id="workspaceRepo" className="workspace-repo">リポジトリ</span>
+        <span id="workspaceLocation" className="workspace-location">.</span>
+      </div>
+      <div className="workspace-branch">
+        <span className="branch-label">ブランチ</span>
+        <span id="branchName" className="branch-name">不明</span>
+      </div>
+    </div>
   );
 }
 
@@ -180,7 +221,11 @@ function Conversation() {
         <span className="run-state-dot" aria-hidden="true" />
         <span id="runStateLabel">接続準備中</span>
       </div>
-      <Composer />
+      <div className="composer-stack">
+        <Composer />
+        <WorkspaceStrip />
+      </div>
+      <PromptModal />
     </section>
   );
 }

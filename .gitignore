@@ -8,4 +8,7 @@ docs/.vitepress/cache/
 *.log
 .env
 .phone-token
+.phone-rate-limits.json
+.phone-workspaces.json
 .uploads/
+tmp/

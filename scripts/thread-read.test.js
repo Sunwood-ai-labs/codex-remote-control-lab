@@ -1,7 +1,17 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
+const fs = require("node:fs");
+const os = require("node:os");
+const path = require("node:path");
 
-const { findLiveBridge, liveBridgeSnapshot, readThreadSnapshot } = require("./thread-read");
+const { findLiveBridge, liveBridgeSnapshot, liveThreadSummaries, readThreadSnapshot } = require("./thread-read");
+
+function writeTempJsonl(records) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "codex-thread-read-"));
+  const file = path.join(dir, "rollout-test-thread.jsonl");
+  fs.writeFileSync(file, records.map((record) => JSON.stringify(record)).join("\n"));
+  return file;
+}
 
 test("liveBridgeSnapshot returns ready in-memory bridge history", () => {
   assert.deepEqual(
@@ -36,6 +46,71 @@ test("findLiveBridge finds starting bridges by requested thread id", () => {
   assert.equal(findLiveBridge(bridges, "thread-123"), bridge);
 });
 
+test("liveThreadSummaries returns only active bridge sessions", () => {
+  const bridges = new Map([
+    [
+      "ready-thread",
+      {
+        ready: true,
+        threadId: "ready-thread",
+        cwd: "/tmp/example-project",
+        clients: new Set([{}]),
+        history: [{ type: "user", text: "hello live thread" }],
+        createdAt: 1000,
+        updatedAt: 2000,
+      },
+    ],
+    [
+      "failed-thread",
+      {
+        ready: false,
+        startupFailed: true,
+        requestedThreadId: "failed-thread",
+        history: [],
+      },
+    ],
+  ]);
+
+  const summaries = liveThreadSummaries(bridges, { now: 3000 });
+
+  assert.deepEqual(summaries, [
+    {
+      id: "ready-thread",
+      threadId: "ready-thread",
+      cwd: "/tmp/example-project",
+      name: null,
+      preview: "hello live thread",
+      ready: true,
+      clients: 1,
+      updatedAt: 2000,
+      createdAt: 1000,
+      source: "live-bridge",
+    },
+  ]);
+});
+
+test("liveThreadSummaries includes starting non-failed bridge sessions", () => {
+  const bridges = new Map([
+    [
+      "connection-temp-key",
+      {
+        ready: false,
+        startupFailed: false,
+        requestedThreadId: "starting-thread",
+        cwd: "/tmp/example-project",
+        history: [],
+        createdAt: 1000,
+      },
+    ],
+  ]);
+
+  const summaries = liveThreadSummaries(bridges, { now: 3000 });
+
+  assert.equal(summaries[0].id, "starting-thread");
+  assert.equal(summaries[0].preview, "起動中");
+  assert.equal(summaries[0].ready, false);
+});
+
 test("readThreadSnapshot does not call app-server for a live bridge thread", async () => {
   let calls = 0;
   const snapshot = await readThreadSnapshot({
@@ -58,6 +133,67 @@ test("readThreadSnapshot does not call app-server for a live bridge thread", asy
   assert.equal(snapshot.source, "live-bridge");
   assert.equal(snapshot.ready, true);
   assert.deepEqual(snapshot.history, [{ type: "assistant", text: "hello" }]);
+});
+
+test("readThreadSnapshot can refresh a ready live bridge from session jsonl", async () => {
+  const calls = [];
+  const file = writeTempJsonl([
+    { type: "event_msg", payload: { type: "user_message", message: "ハロー" } },
+    { type: "event_msg", payload: { type: "agent_message", message: "JSONLから復元" } },
+  ]);
+  const snapshot = await readThreadSnapshot({
+    threadId: "thread-123",
+    liveBridge: {
+      ready: true,
+      threadId: "thread-123",
+      history: [{ type: "user", text: "ハロー" }],
+    },
+    request: async (method, params) => {
+      calls.push({ method, params });
+      return { thread: { id: "thread-123", path: file, turns: [] } };
+    },
+    model: "gpt-5.4",
+    workdir: "/tmp/user-project",
+    historyFromThread: () => [],
+    refreshLiveBridge: true,
+  });
+
+  assert.deepEqual(calls.map((call) => call.method), ["thread/read"]);
+  assert.equal(snapshot.source, "session-jsonl");
+  assert.deepEqual(snapshot.history, [
+    { type: "user", text: "ハロー" },
+    { type: "assistant", text: "JSONLから復元" },
+  ]);
+});
+
+test("readThreadSnapshot preserves live history when refreshed history is shorter", async () => {
+  const snapshot = await readThreadSnapshot({
+    threadId: "thread-123",
+    liveBridge: {
+      ready: true,
+      threadId: "thread-123",
+      history: [
+        { type: "user", text: "質問" },
+        { type: "assistant", text: "進行中の回答" },
+      ],
+    },
+    request: async () => ({
+      thread: {
+        id: "thread-123",
+        turns: [{ role: "user", content: "質問" }],
+      },
+    }),
+    model: "gpt-5.4",
+    workdir: "/tmp/user-project",
+    historyFromThread: () => [{ type: "user", text: "質問" }],
+    refreshLiveBridge: true,
+  });
+
+  assert.equal(snapshot.source, "live-bridge");
+  assert.deepEqual(snapshot.history, [
+    { type: "user", text: "質問" },
+    { type: "assistant", text: "進行中の回答" },
+  ]);
 });
 
 test("readThreadSnapshot does not call app-server while an existing bridge is still starting", async () => {
