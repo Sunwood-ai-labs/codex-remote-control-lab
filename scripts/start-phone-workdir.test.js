@@ -9,8 +9,17 @@ const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), "codex-phone-workdir-"));
 const workdir = path.join(tempRoot, "active-workspace");
 fs.mkdirSync(workdir, { recursive: true });
 process.env.CODEX_WORKDIR = workdir;
+process.env.CODEX_HOME = path.join(tempRoot, "codex-home");
 
-const { discoverWorkspaceEntries, reviewSummary, safeOpenPath } = require("./start-phone");
+const {
+  discoverWorkspaceEntries,
+  installedLocalSkillEntries,
+  installedSkillsFromPluginMarketplaces,
+  mergeSkillEntries,
+  parseRefreshCommand,
+  reviewSummary,
+  safeOpenPath,
+} = require("./start-phone");
 
 function runGit(args) {
   const result = spawnSync("git", args, { cwd: workdir, encoding: "utf8" });
@@ -56,4 +65,87 @@ test("reviewSummary marks CODEX_WORKDIR git paths as openable", async () => {
   assert.equal(reviewFile?.kind, "markdown");
   assert.equal(spacedFile?.openable, true);
   assert.equal(spacedFile?.additions, 1);
+});
+
+test("installedSkillsFromPluginMarketplaces reads installed plugin SKILL.md files", () => {
+  const pluginRoot = path.join(tempRoot, "plugins", "browser-use");
+  const skillDir = path.join(pluginRoot, "skills", "browser");
+  fs.mkdirSync(skillDir, { recursive: true });
+  fs.writeFileSync(
+    path.join(skillDir, "SKILL.md"),
+    "---\nname: browser\ndescription: Browser automation from a skill file\n---\n\n# Browser\n",
+    "utf8",
+  );
+
+  const skills = installedSkillsFromPluginMarketplaces([
+    {
+      id: "openai-bundled",
+      plugins: [
+        {
+          summary: { id: "browser-use@openai-bundled", name: "browser-use", installed: true },
+          source: { type: "local", path: pluginRoot },
+        },
+        {
+          summary: { id: "available@openai-bundled", name: "available", installed: false },
+          source: { type: "local", path: path.join(tempRoot, "plugins", "available") },
+        },
+      ],
+    },
+  ]);
+
+  assert.deepEqual(
+    skills.map((skill) => ({ id: skill.id, name: skill.name, trigger: skill.trigger, description: skill.description })),
+    [
+      {
+        id: "browser-use:browser",
+        name: "browser-use:browser",
+        trigger: "/browser-use:browser",
+        description: "Browser automation from a skill file",
+      },
+    ],
+  );
+});
+
+test("installedLocalSkillEntries reads normal CODEX_HOME skills", () => {
+  const skillDir = path.join(process.env.CODEX_HOME, "skills", "gh-release-notes");
+  fs.mkdirSync(skillDir, { recursive: true });
+  fs.writeFileSync(
+    path.join(skillDir, "SKILL.md"),
+    "---\nname: gh-release-notes\ndescription: Release note drafting\n---\n\n# Release notes\n",
+    "utf8",
+  );
+
+  const skills = installedLocalSkillEntries(process.env.CODEX_HOME);
+
+  assert.deepEqual(
+    skills.map((skill) => ({ id: skill.id, name: skill.name, trigger: skill.trigger, description: skill.description })),
+    [
+      {
+        id: "gh-release-notes",
+        name: "gh-release-notes",
+        trigger: "/gh-release-notes",
+        description: "Release note drafting",
+      },
+    ],
+  );
+});
+
+test("mergeSkillEntries returns plugin and local skills together", () => {
+  const skills = mergeSkillEntries(
+    [{ id: "browser-use:browser", name: "browser-use:browser", trigger: "/browser-use:browser" }],
+    [{ id: "gh-release-notes", name: "gh-release-notes", trigger: "/gh-release-notes" }],
+  );
+
+  assert.deepEqual(
+    skills.map((skill) => skill.trigger),
+    ["/browser-use:browser", "/gh-release-notes"],
+  );
+});
+
+test("parseRefreshCommand rejects shell metacharacters and returns argv", () => {
+  assert.deepEqual(parseRefreshCommand("node scripts/read-desktop-rate-limits.js"), {
+    command: "node",
+    args: ["scripts/read-desktop-rate-limits.js"],
+  });
+  assert.throws(() => parseRefreshCommand("node scripts/read-desktop-rate-limits.js | cat"), /shell metacharacters/);
 });

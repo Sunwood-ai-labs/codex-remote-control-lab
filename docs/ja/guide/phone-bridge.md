@@ -11,6 +11,14 @@ npm ci
 npm run phone
 ```
 
+同じ bridge UI を Codex ではなく Claude Code 向けに起動する場合は、experimental Claude provider を使います。
+
+```bash
+npm run phone:claude
+```
+
+これは turn ごとに `claude -p --output-format stream-json` を起動し、同じ workdir の Claude Code JSONL session を sidebar に読みます。Codex 専用の app-server plugin lookup、live approval callback、history sync は Claude mode では無効です。明示的に選ぶ場合は `PHONE_AGENT_PROVIDER=claude npm run phone` も使えます。
+
 次のような URL が表示されます。
 
 ```text
@@ -72,9 +80,13 @@ npm run phone
 PHONE_UI_PORT=45214
 CODEX_WORKDIR=/Users/admin/Prj/some-project
 CODEX_MODEL=gpt-5.4
+PHONE_AGENT_PROVIDER=codex
+CLAUDE_WORKDIR=/Users/admin/Prj/some-project
+CLAUDE_MODEL=sonnet
 CODEX_APP_SERVER_SOCK=/Users/admin/.codex/app-server-control/app-server-control.sock
 CODEX_APP_SERVER_URL=ws://127.0.0.1:45213
 CODEX_HISTORY_SYNC=1
+PHONE_CODEX_RATE_LIMIT_REFRESH_COMMAND="node scripts/read-desktop-rate-limits.js"
 PHONE_TOKEN=choose-your-own-token
 PHONE_DEBUG_NO_TOKEN=1
 PHONE_DEBUG_BIND=lan
@@ -86,6 +98,8 @@ PHONE_NOTIFY_TIMEOUT_MS=5000
 ```
 
 コメント付きの全体 template は `.env.example` にあります。
+
+Codex rate-limit 表示は任意です。`PHONE_CODEX_RATE_LIMIT_REFRESH_COMMAND="node scripts/read-desktop-rate-limits.js"` を設定すると、bridge は local Codex auth file at `~/.codex/auth.json` を読み、usage endpoint を呼び、表示に使う remaining percentage / reset field だけを正規化して `.phone-rate-limits.json` に小さな snapshot として cache します。従来名の `PHONE_RATE_LIMIT_REFRESH_COMMAND` も Codex 専用として引き続き扱います。Claude mode で誤って Codex limits を表示しないよう、provider ごとの cache に分かれています。bridge は token や raw API response を cache せず、失敗時は最後の provider cache または `unavailable` に fallback します。
 
 起動通知は任意です。`PHONE_NTFY_TOPIC` を設定すると ready URL を ntfy topic へ投稿します。`PHONE_PUSHOVER_TOKEN` と `PHONE_PUSHOVER_USER` を設定すると同じ URL を Pushover へ送ります。`PHONE_DISCORD_WEBHOOK_URL` を設定すると Discord へ投稿します。`npm run phone` は local `.env` を読んでから環境変数を参照します。`PHONE_NTFY_SERVER` は既定で `https://ntfy.sh`、HTTPS 必須です。通知 request は `PHONE_NOTIFY_TIMEOUT_MS` で timeout し、既定は 5000 ms です。LAN IPv4 URL がある場合、通知本文には token 付き bridge URL が入るため、private/protected topic、account、channel を使い、通知用 credential は Git に入れないでください。LAN IPv4 URL を検出できない場合は、provider の link field を省略し、host console を確認するよう通知します。
 

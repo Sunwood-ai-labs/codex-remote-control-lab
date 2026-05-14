@@ -10,10 +10,11 @@
     "server:ws": "codex app-server --listen ws://127.0.0.1:45213",
     "probe:ws": "node scripts/probe-ws.js",
     "phone": "node scripts/start-phone.js",
+    "phone:claude": "PHONE_AGENT_PROVIDER=claude node scripts/start-phone.js",
     "build:ui": "node scripts/build-ui.mjs",
     "screenshots:readme": "node scripts/capture-readme-screenshots.js",
     "test": "node --test scripts/*.test.js",
-    "check": "node scripts/build-ui.mjs --check && node --check scripts/start-phone.js && node --check scripts/probe-ws.js && node --check public/main.js",
+    "check": "node scripts/build-ui.mjs --check && node --check scripts/start-phone.js && node --check scripts/probe-ws.js && node --check scripts/read-desktop-rate-limits.js && node --check public/main.js",
     "docs:dev": "vitepress dev docs",
     "docs:build": "vitepress build docs",
     "docs:preview": "vitepress preview docs"

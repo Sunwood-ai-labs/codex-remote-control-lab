@@ -11,6 +11,14 @@ npm ci
 npm run phone
 ```
 
+To start the same bridge UI against Claude Code instead of Codex, use the experimental Claude provider:
+
+```bash
+npm run phone:claude
+```
+
+This starts per-turn `claude -p --output-format stream-json` processes and reads same-workdir Claude Code JSONL sessions for the sidebar. Codex-only features such as app-server plugin lookup, live approval callbacks, and history sync are disabled in Claude mode. You can also select it explicitly with `PHONE_AGENT_PROVIDER=claude npm run phone`.
+
 The command prints one URL per LAN IPv4 address:
 
 ```text
@@ -72,9 +80,13 @@ In this mode, OCdex does not start a new app-server. It uses the app-server behi
 PHONE_UI_PORT=45214
 CODEX_WORKDIR=/Users/admin/Prj/some-project
 CODEX_MODEL=gpt-5.4
+PHONE_AGENT_PROVIDER=codex
+CLAUDE_WORKDIR=/Users/admin/Prj/some-project
+CLAUDE_MODEL=sonnet
 CODEX_APP_SERVER_SOCK=/Users/admin/.codex/app-server-control/app-server-control.sock
 CODEX_APP_SERVER_URL=ws://127.0.0.1:45213
 CODEX_HISTORY_SYNC=1
+PHONE_CODEX_RATE_LIMIT_REFRESH_COMMAND="node scripts/read-desktop-rate-limits.js"
 PHONE_TOKEN=choose-your-own-token
 PHONE_DEBUG_NO_TOKEN=1
 PHONE_DEBUG_BIND=lan
@@ -86,6 +98,8 @@ PHONE_NOTIFY_TIMEOUT_MS=5000
 ```
 
 See `.env.example` for the full commented template.
+
+Codex rate-limit display is optional. Set `PHONE_CODEX_RATE_LIMIT_REFRESH_COMMAND="node scripts/read-desktop-rate-limits.js"` to let the bridge read the local Codex auth file at `~/.codex/auth.json`, call the usage endpoint, normalize only the displayed remaining percentage/reset fields, and cache that small snapshot in `.phone-rate-limits.json`. The legacy `PHONE_RATE_LIMIT_REFRESH_COMMAND` name is still honored for Codex only, so Claude mode cannot accidentally show Codex limits. The bridge does not cache tokens or raw API responses; failures fall back to the last provider cache or `unavailable`.
 
 Startup notifications are optional. If `PHONE_NTFY_TOPIC` is set, the bridge posts the ready URLs to that ntfy topic. If `PHONE_PUSHOVER_TOKEN` and `PHONE_PUSHOVER_USER` are set, it sends the same URLs through Pushover. If `PHONE_DISCORD_WEBHOOK_URL` is set, it posts them to Discord. `npm run phone` loads local `.env` values before reading these variables. `PHONE_NTFY_SERVER` defaults to `https://ntfy.sh` and must use HTTPS. Notification requests time out after `PHONE_NOTIFY_TIMEOUT_MS`, which defaults to 5000 ms. When a LAN IPv4 URL is available, the message includes the tokenized bridge URL, so use a private/protected topic, account, or channel and keep notification credentials out of Git. If no LAN IPv4 URL is detected, the notification omits provider link fields and tells you to check the host console.
 

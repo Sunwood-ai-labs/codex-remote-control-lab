@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630" role="img" aria-labelledby="title desc">
+  <title id="title">Codex Remote Control Lab v0.4.0</title>
+  <desc id="desc">Release header for the v0.4.0 mobile reliability, slash skill discovery, and bridge status release.</desc>
+  <rect width="1200" height="630" fill="#f6f3ea"/>
+  <rect x="78" y="78" width="1044" height="474" rx="34" fill="#15151a"/>
+  <rect x="138" y="140" width="250" height="350" rx="28" fill="#f6f3ea"/>
+  <path d="M178 205h168v18H178zm0 52h126v18H178zm0 52h150v18H178z" fill="#15151a"/>
+  <path d="M445 268h150a70 70 0 0 1 0 140H472" fill="none" stroke="#41d6a4" stroke-width="34" stroke-linecap="round"/>
+  <circle cx="624" cy="268" r="31" fill="#ff4d5e"/>
+  <path d="M214 404h126" stroke="#41d6a4" stroke-width="18" stroke-linecap="round"/>
+  <path d="M214 440h86" stroke="#ff4d5e" stroke-width="18" stroke-linecap="round"/>
+  <text x="700" y="242" fill="#f6f3ea" font-family="Arial, Helvetica, sans-serif" font-size="54" font-weight="700">v0.4.0</text>
+  <text x="700" y="312" fill="#f6f3ea" font-family="Arial, Helvetica, sans-serif" font-size="43" font-weight="700">Mobile reliability release</text>
+  <text x="700" y="378" fill="#d7d2c3" font-family="Arial, Helvetica, sans-serif" font-size="30">artifact taps, slash skills</text>
+  <text x="700" y="424" fill="#d7d2c3" font-family="Arial, Helvetica, sans-serif" font-size="30">status, providers and CI proof</text>
+</svg>

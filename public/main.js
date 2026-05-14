@@ -12,6 +12,7 @@ const addButton = document.querySelector("#addButton");
 const accessButton = document.querySelector("#accessButton");
 const modelButton = document.querySelector("#modelButton");
 const modelMenu = document.querySelector("#modelMenu");
+const expandPromptButton = document.querySelector("#expandPromptButton");
 const voiceButton = document.querySelector("#voiceButton");
 const fileInput = document.querySelector("#fileInput");
 const attachments = document.querySelector("#attachments");
@@ -36,7 +37,17 @@ const threadSearch = document.querySelector("#threadSearch");
 const threadTitle = document.querySelector("#threadTitle");
 const composer = document.querySelector("#composer");
 const promptInput = document.querySelector("#prompt");
+const promptModal = document.querySelector("#promptModal");
+const promptModalInput = document.querySelector("#promptModalInput");
+const closePromptModalButton = document.querySelector("#closePromptModalButton");
+const cancelPromptModalButton = document.querySelector("#cancelPromptModalButton");
+const applyPromptModalButton = document.querySelector("#applyPromptModalButton");
 const sendButton = document.querySelector("#send");
+const interruptButton = document.querySelector("#interruptRun");
+const workspaceIndicator = document.querySelector("#workspaceIndicator");
+const workspaceRepo = document.querySelector("#workspaceRepo");
+const workspaceLocation = document.querySelector("#workspaceLocation");
+const branchName = document.querySelector("#branchName");
 const approval = document.querySelector("#approval");
 const approvalText = document.querySelector("#approvalText");
 const approveButton = document.querySelector("#approve");
@@ -47,6 +58,8 @@ const rightResizeHandle = document.querySelector("#rightResizeHandle");
 const params = new URLSearchParams(location.search);
 const token = params.get("token") || localStorage.getItem("codexPhoneToken") || "";
 let selectedThread = params.get("thread") || "";
+let activeProvider = "codex";
+let threadProvider = params.get("provider") || "";
 let tokenRequired = true;
 let authMode = "token";
 if (token) localStorage.setItem("codexPhoneToken", token);
@@ -71,6 +84,10 @@ let statusGroup = null;
 let threadCache = [];
 let liveTurnActive = false;
 let lastHistorySignature = "";
+let visibleHistoryThread = selectedThread;
+const maxThreadHistoryCacheSize = 50;
+const threadHistoryCache = new Map();
+const threadReadyNonce = new Map();
 let lastThreadListError = "";
 let lastThreadRefreshError = "";
 let selectedThreadRefreshActive = false;
@@ -80,7 +97,15 @@ let selectedReasoning = localStorage.getItem("codexPhoneReasoning") || "中";
 let settingsRenderSeq = 0;
 let artifactItems = [];
 let activeArtifactPath = "";
+let suppressArtifactTouchClickUntil = 0;
 let activePanel = "artifacts";
+let currentRunState = "connecting";
+let interruptRequestPending = false;
+let currentWorkspace = {
+  repoName: "",
+  workspaceLocation: "",
+  gitBranch: "",
+};
 let accessMode = {
   label: "フルアクセス",
   approvalPolicy: "never",
@@ -88,6 +113,32 @@ let accessMode = {
 };
 let pendingFiles = [];
 let lastReviewDigestSignature = "";
+let slashSkillMenu = null;
+let slashSkills = [];
+let slashSkillsLoaded = false;
+let slashSkillsPromise = null;
+let slashActiveIndex = 0;
+let activeSlashMatch = null;
+
+function normalizeProviderName(provider) {
+  const value = String(provider || "").trim().toLowerCase();
+  if (value === "codex" || value === "claude") return value;
+  return "";
+}
+
+function providerLabel(provider) {
+  return provider === "claude" ? "Claude" : "Codex";
+}
+
+function currentThreadProvider() {
+  return normalizeProviderName(threadProvider || activeProvider) || "codex";
+}
+
+function setActiveProvider(provider) {
+  activeProvider = normalizeProviderName(provider) || "codex";
+  if (!threadProvider) threadProvider = activeProvider;
+  document.documentElement.dataset.provider = activeProvider;
+}
 
 const panelWidthConfig = {
   left: { min: 188, max: 360, fallback: 232, storageKey: "codexLeftSidebarWidth", cssVar: "--thread-width" },
@@ -99,19 +150,125 @@ const runStateText = {
   ready: "待機中",
   running: "Codex 処理中",
   streaming: "回答生成中",
+  reconnecting: "再接続中",
   approval: "承認待ち",
+  interrupting: "中断中",
+  interrupted: "中断しました",
   syncing: "履歴同期中",
   done: "完了",
   disconnected: "切断",
   error: "エラー",
 };
+const interruptibleRunStates = new Set(["running", "streaming", "approval", "interrupting"]);
+const terminalRunStates = new Set(["ready", "done", "interrupted", "disconnected", "error"]);
+
+function updateInterruptButton() {
+  if (!interruptButton) return;
+  const visible = interruptibleRunStates.has(currentRunState);
+  const disabled =
+    !visible || currentRunState === "interrupting" || interruptRequestPending || !ws || ws.readyState !== WebSocket.OPEN;
+  let label = "現在の処理を中断";
+  if (visible && (currentRunState === "interrupting" || interruptRequestPending)) label = "中断要求を送信中です";
+  else if (visible && (!ws || ws.readyState !== WebSocket.OPEN)) label = "接続後に処理を中断";
+  interruptButton.classList.toggle("hidden", !visible);
+  interruptButton.disabled = disabled;
+  interruptButton.title = label;
+  interruptButton.setAttribute("aria-label", label);
+}
 
 function setRunState(state, label) {
   if (!runState || !runStateLabel) return;
   const nextLabel = label || runStateText[state] || state;
-  if (runState.dataset.state === state && runStateLabel.textContent === nextLabel) return;
-  runState.dataset.state = state;
-  runStateLabel.textContent = nextLabel;
+  currentRunState = state;
+  if (terminalRunStates.has(state)) interruptRequestPending = false;
+  if (state !== "approval" && pendingApproval) {
+    pendingApproval = null;
+    approval.classList.add("hidden");
+  }
+  if (runState.dataset.state !== state || runStateLabel.textContent !== nextLabel) {
+    runState.dataset.state = state;
+    runStateLabel.textContent = nextLabel;
+  }
+  updateInterruptButton();
+}
+
+function compactWorkspaceLocation(location) {
+  const value = String(location || ".").replace(/\\/g, "/");
+  if (value === "." || value === "~") return value;
+  const prefix = value.startsWith("~/") ? "~/" : value.startsWith("/") ? "/" : "";
+  const body = prefix ? value.slice(prefix.length) : value;
+  const parts = body.split("/").filter(Boolean);
+  if (parts.length <= 2) return value;
+  return `${prefix}.../${parts.slice(-2).join("/")}`;
+}
+
+function setWorkspaceMeta(payload = {}) {
+  const repoName = String(payload.repoName || currentWorkspace.repoName || "").trim();
+  const location = String(payload.workspaceLocation || currentWorkspace.workspaceLocation || "").trim();
+  const branch = String(payload.gitBranch || payload.branch || currentWorkspace.gitBranch || "").trim();
+  currentWorkspace = { repoName, workspaceLocation: location, gitBranch: branch };
+  if (!workspaceIndicator || !workspaceRepo || !workspaceLocation || !branchName) return;
+  const hasMeta = Boolean(repoName || location || branch);
+  workspaceIndicator.classList.toggle("empty", !hasMeta);
+  workspaceRepo.textContent = repoName || "リポジトリ";
+  workspaceRepo.title = repoName || "";
+  workspaceLocation.textContent = compactWorkspaceLocation(location || ".");
+  workspaceLocation.title = location || ".";
+  branchName.textContent = branch || "不明";
+  branchName.title = branch || "";
+  workspaceIndicator.setAttribute(
+    "aria-label",
+    `現在のワークスペース: ${repoName || "不明"} ${location || "."} ${branch || "不明"}`,
+  );
+}
+
+function parseMaybeJson(value) {
+  if (typeof value !== "string") return value;
+  const trimmed = value.trim();
+  if (!trimmed.startsWith("{") && !trimmed.startsWith("[")) return value;
+  try {
+    return JSON.parse(trimmed);
+  } catch {
+    return value;
+  }
+}
+
+function pickErrorPayload(raw) {
+  const value = parseMaybeJson(raw);
+  if (!value || typeof value !== "object") return { message: String(raw || "Codex error") };
+  if (value.error) return value.error;
+  if (value.params?.error) return value.params.error;
+  return value;
+}
+
+function normalizeUiError(raw) {
+  const problem = pickErrorPayload(raw);
+  const detail = typeof problem === "string" ? problem : JSON.stringify(problem);
+  const message = String(problem.message || problem.additionalDetails || raw || "Codex error");
+  const streamDisconnected = Boolean(problem.codexErrorInfo?.responseStreamDisconnected);
+  const retrying = Boolean(problem.willRetry) || /^Reconnecting\.\.\./i.test(message);
+  if (streamDisconnected && retrying) {
+    return {
+      state: "reconnecting",
+      kind: "status",
+      text: `Codex応答ストリームが一時切断されました。再接続中です。${message ? ` (${message})` : ""}`,
+      detail,
+    };
+  }
+  if (streamDisconnected) {
+    return {
+      state: "error",
+      kind: "error",
+      text: "Codex応答ストリームが切断されました。再接続後にもう一度送信してください。",
+      detail,
+    };
+  }
+  return {
+    state: "error",
+    kind: "error",
+    text: message,
+    detail,
+  };
 }
 
 function applyTheme(themeId) {
@@ -154,9 +311,12 @@ function setAccessButtonLabel() {
 }
 
 function updateModelButton() {
-  modelButton.innerHTML = `<span class="model-button-label">${escapeHtml(`${selectedModelLabel} ${selectedReasoning}`)}</span>${fontAwesomeIcon("chevronDown", "button-chevron-icon")}`;
-  modelButton.setAttribute("aria-label", `モデル ${selectedModelLabel}、インテリジェンス ${selectedReasoning}`);
+  const showReasoning = activeProvider === "codex";
+  const label = showReasoning ? `${selectedModelLabel} ${selectedReasoning}` : selectedModelLabel;
+  modelButton.innerHTML = `<span class="model-button-label">${escapeHtml(label)}</span>${fontAwesomeIcon("chevronDown", "button-chevron-icon")}`;
+  modelButton.setAttribute("aria-label", showReasoning ? `モデル ${selectedModelLabel}、インテリジェンス ${selectedReasoning}` : `モデル ${selectedModelLabel}`);
   for (const row of modelMenu.querySelectorAll("[data-reasoning]")) {
+    row.hidden = !showReasoning;
     const active = row.dataset.reasoning === selectedReasoning;
     row.classList.toggle("active", active);
     row.setAttribute("aria-checked", String(active));
@@ -171,6 +331,7 @@ function updateModelButton() {
     }
   }
   for (const row of modelMenu.querySelectorAll("[data-model-choice]")) {
+    row.hidden = activeProvider !== "codex";
     const active = row.dataset.modelChoice === selectedModel;
     row.classList.toggle("active", active);
     row.setAttribute("aria-checked", String(active));
@@ -189,6 +350,36 @@ function toggleModelMenu() {
   modelButton.setAttribute("aria-expanded", expanded);
 }
 
+function normalizeRateLimitWindows(rateLimits) {
+  const rawWindows = Array.isArray(rateLimits) ? rateLimits : rateLimits?.windows || rateLimits?.limits || [];
+  return rawWindows
+    .map((item) => {
+      const remainingPercent = Number(item.remainingPercent ?? item.remaining ?? item.percent);
+      const label = String(item.label || item.window || item.name || "").trim();
+      const resetsAt = String(item.resetsAt || item.resetAt || item.reset || "").trim();
+      if (!label && !Number.isFinite(remainingPercent) && !resetsAt) return null;
+      return {
+        label: label || "制限",
+        remainingPercent: Number.isFinite(remainingPercent) ? Math.max(0, Math.min(100, Math.round(remainingPercent))) : null,
+        resetsAt,
+      };
+    })
+    .filter(Boolean);
+}
+
+function addRateLimitPanelRows(rateLimits) {
+  const windows = normalizeRateLimitWindows(rateLimits);
+  if (!windows.length) {
+    const detail = rateLimits?.error ? "取得エラー" : rateLimits?.source === "unavailable" ? "取得元未設定" : "未取得";
+    addPanelRow("レート制限", detail);
+    return;
+  }
+  for (const item of windows) {
+    const percent = item.remainingPercent === null ? "--" : `${item.remainingPercent}%`;
+    addPanelRow(`レート制限 ${item.label}`, item.resetsAt ? `${percent} / ${item.resetsAt}` : percent);
+  }
+}
+
 function selectReasoning(value) {
   selectedReasoning = value;
   localStorage.setItem("codexPhoneReasoning", value);
@@ -199,7 +390,8 @@ function selectReasoning(value) {
 
 function selectModel(model) {
   selectedModel = model;
-  selectedModelLabel = model.replace(/^gpt-/, "").toUpperCase().replace(/^GPT-/, "");
+  selectedModelLabel = model.replace(/^gpt-/i, "").replace(/^claude-/i, "");
+  if (activeProvider === "codex") selectedModelLabel = selectedModelLabel.toUpperCase();
   if (selectedModelLabel.startsWith("5.")) selectedModelLabel = selectedModelLabel;
   localStorage.setItem("codexPhoneModel", selectedModel);
   localStorage.setItem("codexPhoneModelLabel", selectedModelLabel);
@@ -632,6 +824,7 @@ function renderReviewDigest(result) {
       </span>
       <span class="chat-artifact-open">開く</span>
     `;
+    bindArtifactOpenTrigger(button);
     artifactListNode.appendChild(button);
   }
   if (!openableFiles.length) artifactListNode.remove();
@@ -647,6 +840,7 @@ function renderReviewDigest(result) {
       <span class="diff-file-stat">${diffStatLabel(file)}</span>
       <span class="diff-file-chevron" aria-hidden="true">⌄</span>
     `;
+    if (file.openable) bindArtifactOpenTrigger(row);
     diffList.appendChild(row);
   }
   return wrap;
@@ -777,15 +971,50 @@ function addStatus(text) {
   addStatusGroupItem(text);
 }
 
+function isNetworkDisconnectMessage(message) {
+  return /Failed to fetch|NetworkError|Load failed|Couldn'?t connect|Connection refused/i.test(String(message || ""));
+}
+
+function shouldSuppressBackgroundFetchError(message) {
+  return isNetworkDisconnectMessage(message) && (!ws || ws.readyState !== WebSocket.OPEN);
+}
+
 function setReady(ready) {
   sendButton.disabled = !ready;
   promptInput.disabled = !ready;
+  updateInterruptButton();
 }
 
 function renderHistory(history) {
   log.replaceChildren();
   statusGroup = null;
   for (const entry of history || []) addEntry(entry.type, entry.text, entry.attachments || []);
+}
+
+function cloneHistory(history = []) {
+  if (typeof structuredClone === "function") return structuredClone(history);
+  return JSON.parse(JSON.stringify(history || []));
+}
+
+function pruneThreadCaches() {
+  while (threadHistoryCache.size > maxThreadHistoryCacheSize) {
+    const oldestThreadId = threadHistoryCache.keys().next().value;
+    threadHistoryCache.delete(oldestThreadId);
+    threadReadyNonce.delete(oldestThreadId);
+  }
+}
+
+function rememberThreadHistory(threadId, history) {
+  if (!threadId) return;
+  threadHistoryCache.delete(threadId);
+  threadHistoryCache.set(threadId, cloneHistory(history));
+  pruneThreadCaches();
+}
+
+function incrementThreadReadyNonce(threadId) {
+  if (!threadId) return;
+  threadReadyNonce.set(threadId, (threadReadyNonce.get(threadId) || 0) + 1);
+  pruneThreadCaches();
 }
 
 function historySignature(history = []) {
@@ -798,13 +1027,25 @@ function historySignature(history = []) {
   );
 }
 
-function renderHistoryIfChanged(history = []) {
+function renderHistoryIfChanged(history = [], { threadId = selectedThread, cache = true } = {}) {
   const signature = historySignature(history);
-  if (signature === lastHistorySignature) return false;
+  if (cache) rememberThreadHistory(threadId, history);
+  if (signature === lastHistorySignature && visibleHistoryThread === threadId) return false;
   lastHistorySignature = signature;
+  visibleHistoryThread = threadId;
   renderHistory(history);
   appendReviewDigest();
   return true;
+}
+
+function prepareThreadHistoryForConnect(threadId) {
+  if (!threadId) {
+    renderHistoryIfChanged([], { threadId: "", cache: false });
+    return;
+  }
+  const cachedHistory = threadHistoryCache.get(threadId);
+  if (cachedHistory) renderHistoryIfChanged(cachedHistory, { threadId, cache: false });
+  else renderHistoryIfChanged([{ type: "assistant", text: "thread履歴を読み込み中..." }], { threadId, cache: false });
 }
 
 function renderThreadList() {
@@ -813,7 +1054,7 @@ function renderThreadList() {
   const newProject = document.createElement("button");
   newProject.type = "button";
   newProject.className = selectedThread ? "project-heading new-project" : "project-heading new-project active";
-  newProject.innerHTML = `${fontAwesomeIcon("folderPlus", "project-icon")}<span>New project</span>`;
+  newProject.innerHTML = `${fontAwesomeIcon("folderPlus", "project-icon")}<span>New ${providerLabel(currentThreadProvider())} thread</span>`;
   newProject.addEventListener("click", () => selectThread(""));
   threadList.appendChild(newProject);
 
@@ -889,6 +1130,12 @@ async function apiGet(path) {
 async function loadBridgeInfo() {
   try {
     const info = await apiGet("/api/info");
+    setActiveProvider(info.provider || "codex");
+    if (info.model) {
+      selectedModelLabel = info.model.replace(/^gpt-/i, "").replace(/^claude-/i, "");
+      localStorage.setItem("codexPhoneModelLabel", selectedModelLabel);
+      updateModelButton();
+    }
     tokenRequired = info.tokenRequired !== false;
     authMode = info.authMode || (tokenRequired ? "token" : "debug-no-token");
     if (!tokenRequired) {
@@ -905,12 +1152,18 @@ async function loadBridgeInfo() {
 async function loadThreads({ background = false } = {}) {
   if (tokenRequired && !token) return;
   try {
-    const result = await apiGet("/api/threads");
-    threadCache = result.data || [];
+    const provider = currentThreadProvider();
+    const result = await apiGet(`/api/threads?provider=${encodeURIComponent(provider)}`);
+    if (result.activeProvider) setActiveProvider(result.activeProvider);
+    threadCache = (result.data || []).map((thread) => ({ ...thread, provider: result.provider || provider }));
     renderThreadList();
     lastThreadListError = "";
   } catch (error) {
     const message = error.message || String(error);
+    if (background && shouldSuppressBackgroundFetchError(message)) {
+      lastThreadListError = message;
+      return;
+    }
     if (message !== lastThreadListError) {
       lastThreadListError = message;
       addEntry("error", `thread一覧を読めませんでした: ${message}`);
@@ -921,14 +1174,18 @@ async function loadThreads({ background = false } = {}) {
 
 async function refreshSelectedThread() {
   if (!selectedThread || liveTurnActive || selectedThreadRefreshActive) return;
+  const requestedThread = selectedThread;
+  const startedReadyNonce = threadReadyNonce.get(requestedThread) || 0;
   selectedThreadRefreshActive = true;
   try {
-    const result = await apiGet(`/api/thread?thread=${encodeURIComponent(selectedThread)}`);
-    if (result.threadId !== selectedThread) return;
-    renderHistoryIfChanged(result.history || []);
+    const result = await apiGet(`/api/thread?thread=${encodeURIComponent(requestedThread)}&provider=${encodeURIComponent(currentThreadProvider())}`);
+    if (result.threadId !== requestedThread || result.threadId !== selectedThread) return;
+    if ((threadReadyNonce.get(requestedThread) || 0) !== startedReadyNonce) return;
+    renderHistoryIfChanged(result.history || [], { threadId: result.threadId });
     lastThreadRefreshError = "";
   } catch (error) {
     const message = error.message || String(error);
+    if (shouldSuppressBackgroundFetchError(message)) return;
     if (message !== lastThreadRefreshError) {
       lastThreadRefreshError = message;
       addEntry("error", `thread更新を読めませんでした: ${message}`);
@@ -952,6 +1209,8 @@ function updateUrlThread() {
   const next = new URL(location.href);
   if (selectedThread) next.searchParams.set("thread", selectedThread);
   else next.searchParams.delete("thread");
+  if (currentThreadProvider() !== "codex") next.searchParams.set("provider", currentThreadProvider());
+  else next.searchParams.delete("provider");
   history.replaceState(null, "", next);
 }
 
@@ -1026,6 +1285,154 @@ function appendToPrompt(text) {
   promptInput.focus();
 }
 
+function ensureSlashSkillMenu() {
+  if (slashSkillMenu) return slashSkillMenu;
+  slashSkillMenu = document.createElement("div");
+  slashSkillMenu.id = "slashSkillMenu";
+  slashSkillMenu.className = "slash-skill-menu hidden";
+  slashSkillMenu.setAttribute("role", "listbox");
+  slashSkillMenu.setAttribute("aria-label", "インストール済みスキル");
+  composer.appendChild(slashSkillMenu);
+  return slashSkillMenu;
+}
+
+function slashTriggerMatch() {
+  const caret = promptInput.selectionStart ?? promptInput.value.length;
+  if (promptInput.selectionEnd !== caret) return null;
+  const before = promptInput.value.slice(0, caret);
+  const match = before.match(/(^|\s)([/／])([\p{L}\p{N}:_-]*)$/u);
+  if (!match) return null;
+  return { start: caret - match[3].length - match[2].length, end: caret, query: match[3].toLowerCase() };
+}
+
+async function loadSlashSkills() {
+  if (slashSkillsLoaded) return slashSkills;
+  if (slashSkillsPromise) return slashSkillsPromise;
+  slashSkillsPromise = apiGet("/api/skills")
+    .then((result) => {
+      slashSkills = result.data || [];
+      slashSkillsLoaded = true;
+      return slashSkills;
+    })
+    .finally(() => {
+      slashSkillsPromise = null;
+    });
+  return slashSkillsPromise;
+}
+
+function filterSlashSkills(query) {
+  const needle = String(query || "").toLowerCase();
+  return slashSkills.filter((skill) => {
+    const haystack = `${skill.trigger || ""} ${skill.name || ""} ${skill.id || ""} ${skill.pluginName || ""} ${skill.description || ""}`.toLowerCase();
+    return haystack.includes(needle);
+  });
+}
+
+function hideSlashSkillMenu() {
+  activeSlashMatch = null;
+  slashActiveIndex = 0;
+  slashSkillMenu?.classList.add("hidden");
+  promptInput.removeAttribute("aria-activedescendant");
+}
+
+function renderSlashSkillMenu(match) {
+  const menu = ensureSlashSkillMenu();
+  const options = filterSlashSkills(match.query).slice(0, 8);
+  slashActiveIndex = Math.min(slashActiveIndex, Math.max(options.length - 1, 0));
+  menu.replaceChildren();
+  if (!options.length) {
+    const empty = document.createElement("div");
+    empty.className = "slash-skill-empty";
+    empty.textContent = slashSkills.length ? "一致するスキルはありません" : "インストール済みスキルはありません";
+    menu.appendChild(empty);
+    menu.classList.remove("hidden");
+    return;
+  }
+  options.forEach((skill, index) => {
+    const row = document.createElement("button");
+    row.type = "button";
+    row.id = `slash-skill-${index}`;
+    row.className = "slash-skill-row";
+    row.setAttribute("role", "option");
+    row.setAttribute("aria-selected", String(index === slashActiveIndex));
+    row.innerHTML = `
+      <span class="slash-skill-command">${escapeHtml(skill.trigger || `/${skill.name || skill.id}`)}</span>
+      <span class="slash-skill-copy">
+        <strong>${escapeHtml(skill.name || skill.id)}</strong>
+        <small>${escapeHtml(skill.description || skill.pluginName || "installed skill")}</small>
+      </span>
+    `;
+    row.addEventListener("mousedown", (event) => event.preventDefault());
+    row.addEventListener("click", () => selectSlashSkill(skill));
+    menu.appendChild(row);
+  });
+  promptInput.setAttribute("aria-activedescendant", `slash-skill-${slashActiveIndex}`);
+  menu.classList.remove("hidden");
+}
+
+async function updateSlashSkillMenu() {
+  const match = slashTriggerMatch();
+  if (!match) {
+    hideSlashSkillMenu();
+    return;
+  }
+  activeSlashMatch = match;
+  ensureSlashSkillMenu().classList.remove("hidden");
+  if (!slashSkillsLoaded) ensureSlashSkillMenu().textContent = "読み込み中...";
+  try {
+    await loadSlashSkills();
+    if (!activeSlashMatch) return;
+    renderSlashSkillMenu(activeSlashMatch);
+  } catch (error) {
+    const menu = ensureSlashSkillMenu();
+    menu.replaceChildren();
+    const row = document.createElement("div");
+    row.className = "slash-skill-empty";
+    row.textContent = `スキルを読めませんでした: ${error.message}`;
+    menu.appendChild(row);
+    menu.classList.remove("hidden");
+  }
+}
+
+function slashMenuRows() {
+  return Array.from(ensureSlashSkillMenu().querySelectorAll(".slash-skill-row"));
+}
+
+function moveSlashSelection(delta) {
+  const rows = slashMenuRows();
+  if (!rows.length) return;
+  slashActiveIndex = (slashActiveIndex + delta + rows.length) % rows.length;
+  rows.forEach((row, index) => row.setAttribute("aria-selected", String(index === slashActiveIndex)));
+  promptInput.setAttribute("aria-activedescendant", `slash-skill-${slashActiveIndex}`);
+}
+
+function selectSlashSkill(skill) {
+  const match = activeSlashMatch || slashTriggerMatch();
+  if (!match) return;
+  const command = skill.trigger || `/${skill.name || skill.id}`;
+  promptInput.value = `${promptInput.value.slice(0, match.start)}${command} ${promptInput.value.slice(match.end)}`;
+  const caret = match.start + command.length + 1;
+  promptInput.setSelectionRange(caret, caret);
+  hideSlashSkillMenu();
+  promptInput.focus();
+}
+
+function openPromptModal() {
+  if (!promptModal || !promptModalInput) return;
+  promptModalInput.value = promptInput.value;
+  promptModal.classList.remove("hidden");
+  document.body.classList.add("prompt-modal-open");
+  requestAnimationFrame(() => promptModalInput.focus());
+}
+
+function closePromptModal({ apply = false } = {}) {
+  if (!promptModal || !promptModalInput) return;
+  if (apply) promptInput.value = promptModalInput.value;
+  promptModal.classList.add("hidden");
+  document.body.classList.remove("prompt-modal-open");
+  promptInput.focus();
+}
+
 function renderArtifactIndex(items) {
   artifactItems = items;
   activeArtifactPath = "";
@@ -1041,7 +1448,15 @@ function renderArtifactRows() {
   for (const item of artifactItems) {
     const icon = item.kind === "image" ? "IMG" : item.kind === "markdown" ? "MD" : "FILE";
     const label = item.name || item.path?.split(/[\\/]/).filter(Boolean).pop() || "artifact";
-    const row = addPanelRow(label, item.path || "", () => showArtifact(item.path), icon);
+    const row = addPanelRow(
+      label,
+      item.path || "",
+      (event) => {
+        event.stopPropagation();
+        showArtifact(item.path);
+      },
+      icon
+    );
     row.classList.toggle("active", item.path === activeArtifactPath);
   }
   if (!artifactItems.length) addPanelRow("アーティファクトは見つかりませんでした");
@@ -1061,11 +1476,68 @@ function escapeHtml(value) {
   });
 }
 
+function closestElement(target, selector) {
+  const element = target instanceof Element ? target : target?.parentElement;
+  return element?.closest(selector) || null;
+}
+
+function openArtifactFromTrigger(trigger) {
+  const path = trigger?.dataset?.openArtifactPath;
+  if (!path) return false;
+  closeModelMenu();
+  showArtifact(path);
+  return true;
+}
+
+function suppressNextArtifactTouchClick() {
+  suppressArtifactTouchClickUntil = Date.now() + 700;
+}
+
+function handleArtifactOpenEvent(event) {
+  const trigger = event.currentTarget?.dataset?.openArtifactPath
+    ? event.currentTarget
+    : closestElement(event.target, "[data-open-artifact-path]");
+  if (!trigger) return false;
+  event.preventDefault();
+  event.stopPropagation();
+  return openArtifactFromTrigger(trigger);
+}
+
+function bindArtifactOpenTrigger(trigger) {
+  trigger.addEventListener("click", handleArtifactOpenEvent);
+  trigger.addEventListener("pointerdown", (event) => {
+    if (event.pointerType && event.pointerType !== "mouse") event.preventDefault();
+  });
+  trigger.addEventListener("pointerup", (event) => {
+    if (event.pointerType && event.pointerType !== "mouse") {
+      suppressNextArtifactTouchClick();
+      handleArtifactOpenEvent(event);
+    }
+  });
+}
+
+document.addEventListener(
+  "click",
+  (event) => {
+    if (Date.now() >= suppressArtifactTouchClickUntil) return;
+    event.preventDefault();
+    event.stopPropagation();
+  },
+  true,
+);
+
 function showToolError(name, error) {
   clearPanel(name);
   addPanelRow("読み込みに失敗しました", error.message);
   addEntry("error", `${name}: ${error.message}`);
   document.body.classList.remove("show-sidebar");
+}
+
+function getPluginStatus(summary = {}) {
+  const state = String(summary.status || summary.state || "").toLowerCase();
+  if (summary.enabled || state === "enabled") return "enabled";
+  if (summary.installed || state === "installed") return "installed";
+  return null;
 }
 
 async function showPlugins() {
@@ -1077,13 +1549,14 @@ async function showPlugins() {
     artifactList.replaceChildren();
     for (const marketplace of marketplaces) {
       const plugins = marketplace.plugins || marketplace.entries || [];
-      if (!plugins.length) addPanelRow(marketplace.name || marketplace.id || "marketplace", "プラグインなし");
       for (const plugin of plugins) {
-        const summary = plugin.summary || plugin;
-        addPanelRow(summary.name || summary.id, summary.enabled ? "enabled" : summary.installed ? "installed" : "available");
+        const summary = plugin?.summary || plugin || {};
+        const status = getPluginStatus(summary);
+        if (!status) continue;
+        addPanelRow(summary.name || summary.id, status);
       }
     }
-    if (!artifactList.children.length) addPanelRow("プラグインは見つかりませんでした");
+    if (!artifactList.children.length) addPanelRow("導入済み/有効なプラグインはありません");
   } catch (error) {
     showToolError("プラグイン", error);
   }
@@ -1113,6 +1586,7 @@ async function showSettings() {
     if (renderSeq !== settingsRenderSeq) return;
     loadingRow.remove();
     const config = result.config?.config || {};
+    addPanelRow("Provider", config.provider || activeProvider);
     addPanelRow("認証", result.auth?.authMethod || "unknown");
     addPanelRow("既定モデル", config.model || selectedModel || "unknown");
     addPanelRow("承認", accessMode.approvalPolicy);
@@ -1301,10 +1775,16 @@ function startVoiceInput() {
 async function showStatus() {
   clearPanel("バックグラウンド", "status");
   try {
-    const result = await apiGet("/api/status");
+    const result = await apiGet("/api/status?refreshRateLimits=1");
+    setWorkspaceMeta(result);
+    addPanelRow("Provider", result.provider || activeProvider);
     addPanelRow("UI port", String(result.uiPort));
-    addPanelRow("Codex app-server", result.codexUrl);
+    addPanelRow("Codex app-server", result.codexUrl || "未使用");
+    addRateLimitPanelRows(result.rateLimits || null);
     addPanelRow("履歴同期", result.historySyncEnabled ? "有効" : "無効");
+    addPanelRow("リポジトリ", result.repoName || "");
+    addPanelRow("現在地", result.workspaceLocation || result.workdir || "");
+    addPanelRow("Git ブランチ", result.gitBranch || "不明");
     addPanelRow("作業ディレクトリ", result.workdir);
     for (const bridge of result.bridges || []) {
       addPanelRow(bridge.threadId || "thread準備中", `${bridge.clients}端末 / ${bridge.ready ? "ready" : "starting"}`);
@@ -1315,6 +1795,7 @@ async function showStatus() {
 }
 
 async function showArtifact(path) {
+  const shouldFocusPanel = window.matchMedia("(max-width: 1100px)").matches;
   showRightPanel();
   setActivePanel("artifacts");
   artifactTitle.textContent = "アーティファクト";
@@ -1329,6 +1810,7 @@ async function showArtifact(path) {
     </div>
     <p>読み込み中...</p>
   `;
+  if (shouldFocusPanel) syncRightPanelState({ focus: true });
   try {
     const result = await apiGet(`/api/file?path=${encodeURIComponent(path)}`);
     setArtifactPreview(result);
@@ -1478,37 +1960,63 @@ function connect() {
     addEntry("error", "URLに token がありません。Mac側に表示されたURLをそのまま開いてください。");
     return;
   }
+  if (currentThreadProvider() !== activeProvider) {
+    if (ws) ws.close();
+    setReady(false);
+    meta.textContent = `${providerLabel(currentThreadProvider())} は ${providerLabel(activeProvider)} bridge では開けません`;
+    setRunState("disconnected", "Providerが違います");
+    return;
+  }
   if (ws) ws.close();
   liveTurnActive = false;
   setRunState("connecting");
-  lastHistorySignature = "";
-  renderHistory([]);
+  prepareThreadHistoryForConnect(selectedThread);
   const selected = threadCache.find((thread) => thread.id === selectedThread);
   threadTitle.textContent = selected ? titleForThread(selected) : "新しい共有thread";
+  if (selectedThread) refreshSelectedThread();
 
   const proto = location.protocol === "https:" ? "wss:" : "ws:";
   const query = new URLSearchParams();
   if (tokenRequired && token) query.set("token", token);
   if (selectedThread) query.set("thread", selectedThread);
   const bridgeQuery = query.toString();
-  ws = new WebSocket(`${proto}//${location.host}/bridge${bridgeQuery ? `?${bridgeQuery}` : ""}`);
+  const socket = new WebSocket(`${proto}//${location.host}/bridge${bridgeQuery ? `?${bridgeQuery}` : ""}`);
+  ws = socket;
   connectButton.disabled = true;
   meta.textContent = "接続中";
 
-  ws.addEventListener("open", () => {
+  socket.addEventListener("open", (event) => {
+    if (event.currentTarget !== ws) return;
     setRunState("connecting", "Codex に接続中");
     addEntry("status", "Macの共有ブリッジへ接続しました。");
   });
 
-  ws.addEventListener("message", (event) => {
-    const msg = JSON.parse(event.data);
+  socket.addEventListener("message", (event) => {
+    if (event.currentTarget !== ws) return;
+    let msg;
+    try {
+      msg = JSON.parse(event.data);
+    } catch {
+      setRunState("error", "bridge応答を読み取れません");
+      addEntry("error", "bridge応答を読み取れません。再接続してください。");
+      return;
+    }
     if (msg.type === "ready") {
       setReady(true);
+      setWorkspaceMeta(msg);
+      setActiveProvider(msg.provider || activeProvider);
+      if (msg.model) {
+        selectedModelLabel = msg.model.replace(/^gpt-/i, "").replace(/^claude-/i, "");
+        if (activeProvider === "codex") selectedModelLabel = selectedModelLabel.toUpperCase();
+        updateModelButton();
+      }
+      const readyThreadId = msg.threadId || selectedThread;
+      incrementThreadReadyNonce(readyThreadId);
       syncReadyThread(msg.threadId);
-      renderHistoryIfChanged(msg.history || []);
+      renderHistoryIfChanged(msg.history || [], { threadId: readyThreadId });
       meta.textContent = `${msg.model}  •  ${msg.clients}端末  •  ${msg.workdir}`;
-      setRunState("ready");
-      addEntry("status", `共有Codex thread ready: ${msg.threadId}`);
+      setRunState(msg.run?.state || "ready", msg.run?.label);
+      addEntry("status", `共有${providerLabel(msg.provider || "codex")} thread ready: ${msg.threadId}`);
       return;
     }
     if (msg.type === "user") {
@@ -1532,19 +2040,25 @@ function connect() {
       approval.classList.remove("hidden");
       return;
     }
+    if (msg.type === "runState") {
+      setRunState(msg.run?.state || "ready", msg.run?.label);
+      return;
+    }
     if (msg.type === "turn" && msg.status === "completed") {
       liveTurnActive = false;
       lastHistorySignature = "";
       assistantEntry = null;
-      setRunState("done", "完了しました");
+      setRunState(msg.run?.state || "done", msg.run?.label || "完了しました");
       loadThreads();
       refreshSelectedThread();
       appendReviewDigest();
       return;
     }
     if (msg.type === "error") {
-      setRunState("error", msg.text || "エラー");
-      addEntry("error", msg.text);
+      const problem = normalizeUiError(msg.text || msg);
+      setRunState(problem.state, problem.text);
+      addEntry(problem.kind, problem.text);
+      if (problem.detail && problem.detail !== problem.text) console.warn("Codex bridge error details", problem.detail);
       return;
     }
     if (msg.type === "status") {
@@ -1555,8 +2069,11 @@ function connect() {
     }
   });
 
-  ws.addEventListener("close", () => {
+  socket.addEventListener("close", (event) => {
+    if (event.currentTarget !== ws) return;
     setReady(false);
+    interruptRequestPending = false;
+    updateInterruptButton();
     connectButton.disabled = false;
     meta.textContent = "切断";
     setRunState("disconnected");
@@ -1583,6 +2100,49 @@ composer.addEventListener("submit", (event) => {
   promptInput.value = "";
   pendingFiles = [];
   renderAttachments();
+});
+
+promptInput.addEventListener("input", () => updateSlashSkillMenu());
+promptInput.addEventListener("click", () => updateSlashSkillMenu());
+promptInput.addEventListener("compositionend", () => updateSlashSkillMenu());
+promptInput.addEventListener("keydown", (event) => {
+  if (!slashSkillMenu || slashSkillMenu.classList.contains("hidden")) return;
+  if (event.key === "Escape") {
+    event.preventDefault();
+    hideSlashSkillMenu();
+    return;
+  }
+  if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+    event.preventDefault();
+    moveSlashSelection(event.key === "ArrowDown" ? 1 : -1);
+    return;
+  }
+  if (event.key === "Enter" || event.key === "Tab") {
+    const rows = slashMenuRows();
+    if (!rows.length) return;
+    event.preventDefault();
+    const skill = filterSlashSkills(activeSlashMatch?.query || "")[slashActiveIndex];
+    if (skill) selectSlashSkill(skill);
+  }
+});
+
+interruptButton?.addEventListener("click", () => {
+  if (!interruptibleRunStates.has(currentRunState) || interruptRequestPending) return;
+  if (!ws || ws.readyState !== WebSocket.OPEN) {
+    addStatus("未接続のため中断要求を送信できません。");
+    return;
+  }
+  interruptRequestPending = true;
+  pendingApproval = null;
+  approval.classList.add("hidden");
+  setRunState("interrupting", "中断要求を送信中");
+  try {
+    ws.send(JSON.stringify({ type: "interrupt", token }));
+  } catch (error) {
+    interruptRequestPending = false;
+    updateInterruptButton();
+    addEntry("error", `中断要求の送信に失敗しました: ${error.message}`);
+  }
 });
 
 approveButton.addEventListener("click", () => {
@@ -1632,9 +2192,21 @@ menuButton.addEventListener("click", () => {
 });
 closePanelButton.addEventListener("click", () => closeRightPanel({ restoreFocus: true }));
 artifactPreview.addEventListener("click", (event) => {
-  if (event.target.closest("[data-preview-close]")) hideArtifactPreview();
+  if (closestElement(event.target, "[data-preview-close]")) hideArtifactPreview();
 });
 addButton.addEventListener("click", () => fileInput.click());
+expandPromptButton?.addEventListener("click", openPromptModal);
+closePromptModalButton?.addEventListener("click", () => closePromptModal({ apply: true }));
+cancelPromptModalButton?.addEventListener("click", () => closePromptModal({ apply: false }));
+applyPromptModalButton?.addEventListener("click", () => closePromptModal({ apply: true }));
+promptModal?.addEventListener("click", (event) => {
+  if (event.target === promptModal) closePromptModal({ apply: true });
+});
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && promptModal && !promptModal.classList.contains("hidden")) {
+    closePromptModal({ apply: true });
+  }
+});
 fileInput.addEventListener("change", async () => {
   const files = Array.from(fileInput.files || []).filter((file) => file.type.startsWith("image/"));
   try {
@@ -1656,29 +2228,25 @@ accessButton.addEventListener("click", () => {
 modelButton.addEventListener("click", toggleModelMenu);
 voiceButton.addEventListener("click", startVoiceInput);
 modelMenu.addEventListener("click", (event) => {
-  const reasoningRow = event.target.closest("[data-reasoning]");
+  const reasoningRow = closestElement(event.target, "[data-reasoning]");
   if (reasoningRow) {
     selectReasoning(reasoningRow.dataset.reasoning);
     return;
   }
-  const modelRow = event.target.closest("[data-model-choice]");
+  const modelRow = closestElement(event.target, "[data-model-choice]");
   if (modelRow) {
     selectModel(modelRow.dataset.modelChoice);
     return;
   }
-  if (event.target.closest("#moreModelsButton")) {
+  if (closestElement(event.target, "#moreModelsButton")) {
     closeModelMenu();
     showModels();
   }
 });
 document.addEventListener("click", async (event) => {
-  const artifactOpen = event.target.closest("[data-open-artifact-path]");
-  if (artifactOpen) {
-    showArtifact(artifactOpen.dataset.openArtifactPath);
-    return;
-  }
+  if (handleArtifactOpenEvent(event)) return;
 
-  const button = event.target.closest("[data-message-action='copy']");
+  const button = closestElement(event.target, "[data-message-action='copy']");
   if (!button) return;
   const entry = button.closest(".entry");
   const body = entry?.querySelector(".entry-body");
@@ -1723,6 +2291,7 @@ document.addEventListener("keydown", (event) => {
 document.addEventListener("click", (event) => {
   if (!document.body.classList.contains("show-panel")) return;
   if (window.matchMedia("(min-width: 1101px)").matches) return;
+  if (closestElement(event.target, "[data-open-artifact-path]")) return;
   if (artifactPanel.contains(event.target) || menuButton.contains(event.target)) return;
   closeRightPanel({ restoreFocus: true });
 });

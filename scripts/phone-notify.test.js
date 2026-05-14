@@ -1,7 +1,7 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 
-const { bridgeUrls, notificationTargets, notifyBridgeUrls } = require("./phone-notify");
+const { bridgeUrls, notificationTargets, notifyBridgeUrls, notifyTaskEvent, taskNotificationMessage } = require("./phone-notify");
 
 test("bridgeUrls builds tokenized LAN URLs", () => {
   assert.deepEqual(bridgeUrls(["192.168.11.8", "10.0.0.12"], 45214, "secret"), [
@@ -112,6 +112,48 @@ test("notifyBridgeUrls posts to configured Discord webhook", async () => {
   assert.equal(requests[0].options.headers["content-type"], "application/json");
   assert.match(JSON.parse(requests[0].options.body).content, /Codex phone bridge is ready/);
   assert.deepEqual(JSON.parse(requests[0].options.body).allowed_mentions, { parse: [] });
+});
+
+test("notifyTaskEvent posts a Discord completion notification", async () => {
+  const requests = [];
+  const results = await notifyTaskEvent(
+    {
+      status: "completed",
+      provider: "codex",
+      threadId: "thread-123",
+      turnId: "turn-456",
+      model: "gpt-5.4",
+      workdir: "/tmp/demo",
+      url: "http://100.64.0.1:45214/?token=secret&thread=thread-123",
+    },
+    {
+      env: { PHONE_DISCORD_WEBHOOK_URL: "https://discord.com/api/webhooks/123/abc" },
+      fetch: async (url, options) => {
+        requests.push({ url, options });
+        return { ok: true, status: 204 };
+      },
+    },
+  );
+
+  assert.deepEqual(results, [{ type: "discord", ok: true }]);
+  assert.equal(requests[0].url, "https://discord.com/api/webhooks/123/abc");
+  const body = JSON.parse(requests[0].options.body);
+  assert.match(body.content, /codex task completed/);
+  assert.match(body.content, /Thread: thread-123/);
+  assert.match(body.content, /http:\/\/100\.64\.0\.1:45214/);
+  assert.deepEqual(body.allowed_mentions, { parse: [] });
+});
+
+test("taskNotificationMessage includes failure details", () => {
+  assert.match(
+    taskNotificationMessage({
+      status: "failed",
+      provider: "codex",
+      threadId: "session-123",
+      message: "process exited",
+    }),
+    /codex task failed[\s\S]*process exited/,
+  );
 });
 
 test("notifyBridgeUrls rejects non-Discord webhook URLs", async () => {
