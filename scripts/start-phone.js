@@ -424,6 +424,11 @@ function safeDirectoryPath(input, base = os.homedir()) {
   }
 }
 
+function safeSessionCwdPath(input) {
+  if (!input) return null;
+  return safeDirectoryPath(input, workdir) || safeDirectoryPath(input, os.homedir());
+}
+
 function readDirectoryListing(input, showHidden = false, base = os.homedir()) {
   const directory = safeDirectoryPath(input || base, base);
   if (!directory) return null;
@@ -1816,7 +1821,7 @@ async function main() {
     }
     const threadId = url.searchParams.get("thread") || null;
     const requestedCwd = url.searchParams.get("cwd");
-    const safeCwd = requestedCwd ? safeDirectoryPath(requestedCwd, os.homedir()) : null;
+    const safeCwd = requestedCwd ? safeSessionCwdPath(requestedCwd) : null;
     if (requestedCwd && !safeCwd) {
       socket.write("HTTP/1.1 400 Bad Request\r\n\r\n");
       socket.destroy();
@@ -1905,6 +1910,7 @@ if (require.main === module) {
     safeOpenPath,
     safePathWithin,
     safeRelativePath,
+    safeSessionCwdPath,
     safeWorkdirPath,
     normalizeHookState,
   };

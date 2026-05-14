@@ -17,6 +17,7 @@ const {
   reviewSummary,
   safeDirectoryPath,
   safeOpenPath,
+  safeSessionCwdPath,
 } = require("./start-phone");
 
 function runGit(args) {
@@ -85,6 +86,14 @@ test("safeDirectoryPath and readDirectoryListing stay inside the provided root",
 
   const hiddenListing = readDirectoryListing(homeRoot, true, homeRoot);
   assert.deepEqual(hiddenListing.entries.map((entry) => entry.name), [".hidden-project", "project-a"]);
+});
+
+test("safeSessionCwdPath allows the active CODEX_WORKDIR even outside home", () => {
+  const activeChild = path.join(workdir, "nested-project");
+  fs.mkdirSync(activeChild, { recursive: true });
+
+  assert.equal(safeSessionCwdPath(activeChild)?.absolute, fs.realpathSync(activeChild));
+  assert.equal(safeSessionCwdPath(tempRoot), null);
 });
 
 test("readSkills returns public skill metadata without absolute paths", () => {

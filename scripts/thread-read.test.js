@@ -168,6 +168,34 @@ test("readThreadSnapshot can refresh a ready live bridge from session jsonl", as
   ]);
 });
 
+test("readThreadSnapshot preserves live history when refreshed session history is shorter", async () => {
+  const file = writeTempJsonl([
+    { type: "event_msg", payload: { type: "user_message", message: "short persisted history" } },
+  ]);
+  const snapshot = await readThreadSnapshot({
+    threadId: "thread-123",
+    liveBridge: {
+      ready: true,
+      threadId: "thread-123",
+      history: [
+        { type: "user", text: "live question" },
+        { type: "assistant", text: "live answer" },
+      ],
+    },
+    request: async () => ({ thread: { id: "thread-123", path: file, turns: [] } }),
+    model: "gpt-5.4",
+    workdir: "/tmp/user-project",
+    historyFromThread: () => [],
+    refreshLiveBridge: true,
+  });
+
+  assert.equal(snapshot.source, "live-bridge");
+  assert.deepEqual(snapshot.history, [
+    { type: "user", text: "live question" },
+    { type: "assistant", text: "live answer" },
+  ]);
+});
+
 test("readThreadSnapshot does not call app-server while an existing bridge is still starting", async () => {
   let calls = 0;
   const snapshot = await readThreadSnapshot({

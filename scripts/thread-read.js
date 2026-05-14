@@ -130,13 +130,7 @@ async function readThreadSnapshot({ threadId, liveBridge, request, model, workdi
   }
 
   const refreshedSnapshot = snapshotFromThread({ thread, threadId, historyFromThread });
-  if (
-    liveSnapshot &&
-    !refreshedSnapshot.history.length &&
-    refreshedSnapshot.history.length <= liveSnapshot.history.length
-  ) {
-    return liveSnapshot;
-  }
+  if (liveSnapshot && refreshedSnapshot.history.length < liveSnapshot.history.length) return liveSnapshot;
   if (liveSnapshot && historySignature(refreshedSnapshot.history) === historySignature(liveSnapshot.history)) return liveSnapshot;
   return refreshedSnapshot;
 }
