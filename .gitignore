@@ -9,4 +9,11 @@ docs/.vitepress/cache/
 *.log
 .env
 .phone-token
+.phone-thread
+.phone-thread-cwd
+.phone-rate-limits.json
+.phone-workspaces.json
 .uploads/
+tmp/
+slash-commands.local.json
+.worktrees/

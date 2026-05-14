@@ -1,0 +1,16 @@
+[
+  {
+    "name": "handoff",
+    "kind": "prompt",
+    "usage": "/handoff [topic]",
+    "description": "現在の session の引き継ぎメモを作成します。",
+    "template": "この session の引き継ぎメモを簡潔に作成してください。焦点: {{args}}"
+  },
+  {
+    "name": "summary",
+    "kind": "prompt",
+    "usage": "/summary [focus]",
+    "description": "現在の状況を指定した観点で要約します。",
+    "template": "現在の状況を要約してください。観点: {{args}}"
+  }
+]
