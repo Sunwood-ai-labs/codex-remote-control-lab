@@ -94,6 +94,8 @@ test("browser logic attaches terminal mode to the selected Codex thread through 
   assert.match(main, /closedThreadIds\.has\(thread\.id\)/);
   assert.match(main, /liveIds\.has\(session\.threadId\)/);
   assert.match(main, /rememberClosedThread\(removed\?\.threadId\)/);
+  assert.match(main, /const existingThread = existingIndex >= 0 \? threadCache\[existingIndex\] : null;/);
+  assert.match(main, /cwd: existingThread\?\.cwd \|\| currentWorkdir,/);
   assert.match(main, /function switchOpenSessionByOffset\(offset\)/);
   assert.match(main, /function bindSessionSwipe\(\)/);
   assert.match(main, /const sessionHiddenToggle = document\.querySelector\("#sessionHiddenToggle"\)/);

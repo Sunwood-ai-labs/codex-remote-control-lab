@@ -1504,10 +1504,11 @@ function syncReadyThread(threadId, options = {}) {
     return historyThread;
   });
   const existingIndex = threadCache.findIndex((thread) => thread.id === threadId);
+  const existingThread = existingIndex >= 0 ? threadCache[existingIndex] : null;
   const liveThread = {
     id: threadId,
     threadId,
-    cwd: currentWorkdir,
+    cwd: existingThread?.cwd || currentWorkdir,
     status: remoteSessionState?.status || "ready",
     ready: true,
     live: true,
