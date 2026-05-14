@@ -457,12 +457,12 @@ function addOrUpdateOpenSession(input) {
   return session;
 }
 
-function syncOpenSessionsFromThreads() {
-  const liveIds = new Set(threadCache.map((thread) => thread.id).filter(Boolean));
+function syncOpenSessionsFromThreads(threads = threadCache) {
+  const liveIds = new Set(threads.map((thread) => thread.id).filter(Boolean));
   const previousActive =
     openSessions.find((session) => session.key === activeSessionKey && session.threadId) || resumeCandidateSession || readResumeSession();
   const known = new Map(openSessions.map((item) => [item.threadId, item]));
-  for (const thread of threadCache) {
+  for (const thread of threads) {
     if (!thread.id) continue;
     if (closedThreadIds.has(thread.id) && thread.id !== selectedThread) continue;
     const existing = known.get(thread.id);
@@ -505,6 +505,20 @@ function syncOpenSessionsFromThreads() {
   }
   persistOpenSessions();
   renderSessionChrome();
+}
+
+function mergeThreadRows(historyRows = [], liveRows = []) {
+  const merged = new Map();
+  for (const thread of historyRows) {
+    if (thread?.id) merged.set(thread.id, thread);
+  }
+  for (const thread of liveRows) {
+    if (!thread?.id) continue;
+    merged.set(thread.id, { ...(merged.get(thread.id) || {}), ...thread, live: true });
+  }
+  return Array.from(merged.values()).sort((left, right) => {
+    return Number(right.updatedAt || right.createdAt || 0) - Number(left.updatedAt || left.createdAt || 0);
+  });
 }
 
 function activeSessionIndex() {
@@ -1351,9 +1365,17 @@ async function loadBridgeInfo() {
 async function loadThreads({ background = false } = {}) {
   if (tokenRequired && !token) return;
   try {
-    const result = await apiGet("/api/live-threads");
-    threadCache = result.data || [];
-    syncOpenSessionsFromThreads();
+    const [historyResult, liveResult] = await Promise.allSettled([
+      apiGet("/api/threads"),
+      apiGet("/api/live-threads"),
+    ]);
+    if (historyResult.status === "rejected" && liveResult.status === "rejected") {
+      throw historyResult.reason;
+    }
+    const historyRows = historyResult.status === "fulfilled" ? historyResult.value.data || [] : [];
+    const liveRows = liveResult.status === "fulfilled" ? liveResult.value.data || [] : [];
+    threadCache = mergeThreadRows(historyRows, liveRows);
+    syncOpenSessionsFromThreads(liveRows);
     renderThreadList();
     lastThreadListError = "";
   } catch (error) {
@@ -1371,7 +1393,7 @@ async function refreshSelectedThread() {
   if (!threadCache.some((thread) => thread.id === selectedThread)) {
     const resumable = resumeCandidateSession || readResumeSession();
     if (resumable?.threadId === selectedThread) return;
-    clearSelectedThread({ reason: `稼働中ではないthreadの履歴表示を停止しました: ${selectedThread}` });
+    clearSelectedThread({ reason: `一覧にないthreadの履歴表示を停止しました: ${selectedThread}` });
     return;
   }
   selectedThreadRefreshActive = true;

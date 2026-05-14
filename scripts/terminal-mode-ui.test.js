@@ -83,10 +83,11 @@ test("browser logic attaches terminal mode to the selected Codex thread through 
   assert.match(main, /function forgetClosedThread\(threadId\)/);
   assert.match(main, /function addOrUpdateOpenSession\(input\)/);
   assert.match(main, /forgetClosedThread\(session\.threadId\)/);
+  assert.match(main, /apiGet\("\/api\/threads"\)/);
   assert.match(main, /apiGet\("\/api\/live-threads"\)/);
-  assert.doesNotMatch(main, /apiGet\("\/api\/threads"\)/);
-  assert.match(main, /稼働中ではないthreadの履歴表示を停止しました/);
-  assert.match(main, /function syncOpenSessionsFromThreads\(\)/);
+  assert.match(main, /function mergeThreadRows\(historyRows = \[\], liveRows = \[\]\)/);
+  assert.match(main, /一覧にないthreadの履歴表示を停止しました/);
+  assert.match(main, /function syncOpenSessionsFromThreads\(threads = threadCache\)/);
   assert.match(main, /closedThreadIds\.has\(thread\.id\)/);
   assert.match(main, /liveIds\.has\(session\.threadId\)/);
   assert.match(main, /rememberClosedThread\(removed\?\.threadId\)/);

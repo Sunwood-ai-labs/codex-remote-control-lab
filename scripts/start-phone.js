@@ -1579,7 +1579,7 @@ async function main() {
       if (!requireToken(url, phoneToken, res)) return;
       try {
         const result = await appServerRequest("thread/list", {
-          limit: 30,
+          limit: 200,
           sortKey: "updated_at",
           sortDirection: "desc",
           archived: false,
