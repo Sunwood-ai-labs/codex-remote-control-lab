@@ -1,7 +1,17 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
+const fs = require("node:fs");
+const os = require("node:os");
+const path = require("node:path");
 
-const { findLiveBridge, liveBridgeSnapshot, readThreadSnapshot } = require("./thread-read");
+const { findLiveBridge, liveBridgeSnapshot, liveThreadSummaries, readThreadSnapshot } = require("./thread-read");
+
+function writeTempJsonl(records) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "codex-thread-read-"));
+  const file = path.join(dir, "rollout-test-thread.jsonl");
+  fs.writeFileSync(file, records.map((record) => JSON.stringify(record)).join("\n"));
+  return file;
+}
 
 test("liveBridgeSnapshot returns ready in-memory bridge history", () => {
   assert.deepEqual(
@@ -36,6 +46,73 @@ test("findLiveBridge finds starting bridges by requested thread id", () => {
   assert.equal(findLiveBridge(bridges, "thread-123"), bridge);
 });
 
+test("liveThreadSummaries returns only active bridge sessions", () => {
+  const bridges = new Map([
+    [
+      "thread-live",
+      {
+        threadId: "thread-live",
+        requestedThreadId: null,
+        cwd: "/tmp/project-a",
+        ready: true,
+        clients: new Set(["browser"]),
+        history: [{ type: "user", text: "hello live thread" }],
+        createdAt: 1000,
+        updatedAt: 2000,
+      },
+    ],
+    [
+      "thread-failed",
+      {
+        threadId: null,
+        requestedThreadId: "thread-failed",
+        cwd: "/tmp/project-b",
+        ready: false,
+        startupFailed: true,
+        clients: new Set(),
+        history: [],
+      },
+    ],
+  ]);
+
+  const summaries = liveThreadSummaries(bridges, {
+    now: 3000,
+    sessionStateFor: (threadId) => (threadId === "thread-live" ? { status: "running", updatedAt: 2500 } : null),
+  });
+
+  assert.equal(summaries.length, 1);
+  assert.equal(summaries[0].id, "thread-live");
+  assert.equal(summaries[0].cwd, "/tmp/project-a");
+  assert.equal(summaries[0].preview, "hello live thread");
+  assert.equal(summaries[0].clients, 1);
+  assert.equal(summaries[0].status, "running");
+  assert.equal(summaries[0].updatedAt, 2500);
+});
+
+test("liveThreadSummaries includes starting non-failed bridge sessions", () => {
+  const bridges = new Map([
+    [
+      "connection-key",
+      {
+        threadId: null,
+        requestedThreadId: "thread-starting",
+        cwd: "/tmp/project-a",
+        ready: false,
+        clients: new Set(),
+        history: [],
+        createdAt: 1000,
+      },
+    ],
+  ]);
+
+  const summaries = liveThreadSummaries(bridges, { now: 3000 });
+
+  assert.equal(summaries.length, 1);
+  assert.equal(summaries[0].id, "thread-starting");
+  assert.equal(summaries[0].preview, "起動中");
+  assert.equal(summaries[0].status, "starting");
+});
+
 test("readThreadSnapshot does not call app-server for a live bridge thread", async () => {
   let calls = 0;
   const snapshot = await readThreadSnapshot({
@@ -58,6 +135,37 @@ test("readThreadSnapshot does not call app-server for a live bridge thread", asy
   assert.equal(snapshot.source, "live-bridge");
   assert.equal(snapshot.ready, true);
   assert.deepEqual(snapshot.history, [{ type: "assistant", text: "hello" }]);
+});
+
+test("readThreadSnapshot can refresh a ready live bridge from session jsonl", async () => {
+  const file = writeTempJsonl([
+    { type: "event_msg", payload: { type: "user_message", message: "何が確認できた？？" } },
+    { type: "event_msg", payload: { type: "agent_message", message: "テスト結果を確認しました。" } },
+  ]);
+  const calls = [];
+  const snapshot = await readThreadSnapshot({
+    threadId: "thread-123",
+    liveBridge: {
+      ready: true,
+      threadId: "thread-123",
+      history: [{ type: "user", text: "ハロー" }],
+    },
+    request: async (method, params) => {
+      calls.push({ method, params });
+      return { thread: { id: "thread-123", path: file, turns: [] } };
+    },
+    model: "gpt-5.4",
+    workdir: "/tmp/user-project",
+    historyFromThread: () => [],
+    refreshLiveBridge: true,
+  });
+
+  assert.deepEqual(calls.map((call) => call.method), ["thread/read"]);
+  assert.equal(snapshot.source, "session-jsonl");
+  assert.deepEqual(snapshot.history, [
+    { type: "user", text: "何が確認できた？？" },
+    { type: "assistant", text: "テスト結果を確認しました。" },
+  ]);
 });
 
 test("readThreadSnapshot does not call app-server while an existing bridge is still starting", async () => {

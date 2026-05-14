@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>EnvironmentVariables</key>
+	<dict>
+		<key>CODEX_APP_SERVER_URL</key>
+		<string>ws://127.0.0.1:45213</string>
+		<key>PATH</key>
+		<string>/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+		<key>PHONE_DISCORD_WEBHOOK_URL</key>
+		<string></string>
+		<key>PHONE_NTFY_TOPIC</key>
+		<string></string>
+		<key>PHONE_PUSHOVER_TOKEN</key>
+		<string></string>
+		<key>PHONE_PUSHOVER_USER</key>
+		<string></string>
+		<key>PHONE_UI_PORT</key>
+		<string>45214</string>
+	</dict>
+	<key>KeepAlive</key>
+	<dict>
+		<key>SuccessfulExit</key>
+		<false/>
+	</dict>
+	<key>Label</key>
+	<string>com.sunwood.codex-remote-control-lab.phone</string>
+	<key>ProgramArguments</key>
+	<array>
+		<string>/bin/zsh</string>
+		<string>-lc</string>
+		<string>npm run phone</string>
+	</array>
+	<key>RunAtLoad</key>
+	<true/>
+	<key>StandardErrorPath</key>
+	<string>/path/to/codex-remote-control-lab/.logs/launchd-phone.err.log</string>
+	<key>StandardOutPath</key>
+	<string>/path/to/codex-remote-control-lab/.logs/launchd-phone.out.log</string>
+	<key>WorkingDirectory</key>
+	<string>/path/to/codex-remote-control-lab</string>
+</dict>
+</plist>
