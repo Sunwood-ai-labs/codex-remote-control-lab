@@ -1735,13 +1735,13 @@ class SharedBridge {
         if (msg.error) {
           const failedTurnId = this.activeTurnId;
           this.activeTurnId = null;
-          this.setBridgeRunState("error", "スラッシュコマンドに失敗", failedTurnId);
+          this.setBridgeRunState("error", "Slash command に失敗", failedTurnId);
           this.emit("error", { text: msg.error.message || JSON.stringify(msg.error) });
           this.startNextQueuedTurn();
         } else {
-          this.setBridgeRunState("running", pendingMethod === "thread/compact/start" ? "Compaction 実行中" : "シェルコマンド実行中", this.activeTurnId);
+          this.setBridgeRunState("running", pendingMethod === "thread/compact/start" ? "Compaction 実行中" : "Shell command 実行中", this.activeTurnId);
           this.emit("status", {
-            text: pendingMethod === "thread/compact/start" ? "会話の compaction を受け付けました。" : "シェルコマンドを受け付けました。",
+            text: pendingMethod === "thread/compact/start" ? "会話の compaction を受け付けました。" : "Shell command を受け付けました。",
           });
         }
         return;
@@ -1891,7 +1891,7 @@ class SharedBridge {
 
   prompt(text, attachments = [], options = {}) {
     if (!this.threadId) {
-      this.emit("error", { text: "Thread の準備がまだ完了していません。" });
+      this.emit("error", { text: "Thread is not ready yet" });
       return;
     }
     if (this.activeTurnId || this.hasPendingTurnStart()) {
@@ -1974,16 +1974,16 @@ class SharedBridge {
   slashCommand(raw, options = {}) {
     const parsed = parseSlashInput(raw);
     if (!parsed) {
-      this.emit("error", { text: "スラッシュコマンドの形式を解釈できませんでした。" });
+      this.emit("error", { text: "Slash command の形式を解釈できませんでした。" });
       return;
     }
     const command = findSlashCommand(currentSlashCommands(), parsed.command);
     if (!command) {
-      this.emit("status", { text: `/${parsed.command} はこのリモートUIでは未対応です。/commands で対応一覧を確認できます。` });
+      this.emit("status", { text: `/${parsed.command} はこの remote UI では未対応です。/commands で対応一覧を確認できます。` });
       return;
     }
     if (!this.threadId) {
-      this.emit("error", { text: "Thread の準備がまだ完了していません。" });
+      this.emit("error", { text: "Thread is not ready yet" });
       return;
     }
     if (command.name === "compact") {
@@ -2014,11 +2014,11 @@ class SharedBridge {
         return;
       }
       this.activeTurnId = crypto.randomUUID();
-      this.setBridgeRunState("running", "シェルコマンド実行中", this.activeTurnId);
+      this.setBridgeRunState("running", "Shell command 実行中", this.activeTurnId);
       const id = this.request("thread/shellCommand", { threadId: this.threadId, command: shellCommand });
       if (!id) {
         this.activeTurnId = null;
-        this.setBridgeRunState("error", "シェルコマンドを開始できませんでした");
+        this.setBridgeRunState("error", "Shell command を開始できませんでした");
         return;
       }
       this.pending.set(id, "thread/shellCommand");
@@ -2277,7 +2277,7 @@ function bindBrowser(browser, phoneToken, threadId, options = {}) {
     if (msg.type === "prompt") bridge.prompt(msg.text, msg.attachments, msg.options);
     if (msg.type === "slashCommand") {
       if (typeof bridge.slashCommand === "function") bridge.slashCommand(msg.text, msg.options);
-      else bridge.emitTo(browser, "status", { text: `${providerLabel()} providerではスラッシュコマンドは未対応です。` });
+      else bridge.emitTo(browser, "status", { text: `${providerLabel()} providerでは slash command は未対応です。` });
     }
     if (msg.type === "interrupt") {
       if (typeof bridge.interrupt === "function") bridge.interrupt();
