@@ -1,5 +1,7 @@
 const fs = require("node:fs");
 
+const defaultMaxBytes = 1024 * 1024;
+
 function payloadText(payload) {
   const content = payload?.content;
   if (typeof content === "string") return content;
@@ -54,8 +56,22 @@ function entryFromJsonlRecord(record) {
 function parseSessionJsonlHistory(filePath, options = {}) {
   if (!filePath || !fs.existsSync(filePath)) return [];
   const limit = Number(options.limit || 80);
+  const maxBytes = Number(options.maxBytes || defaultMaxBytes);
   const history = [];
-  const lines = fs.readFileSync(filePath, "utf8").split(/\r?\n/);
+  const stat = fs.statSync(filePath);
+  const start = Math.max(0, stat.size - maxBytes);
+  const length = stat.size - start;
+  const buffer = Buffer.alloc(length);
+  const fd = fs.openSync(filePath, "r");
+
+  try {
+    fs.readSync(fd, buffer, 0, length, start);
+  } finally {
+    fs.closeSync(fd);
+  }
+
+  let lines = buffer.toString("utf8").split(/\r?\n/);
+  if (start > 0) lines = lines.slice(1);
 
   for (const line of lines) {
     if (!line.trim()) continue;

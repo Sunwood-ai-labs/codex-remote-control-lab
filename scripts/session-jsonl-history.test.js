@@ -45,3 +45,21 @@ test("parseSessionJsonlHistory includes command status without duplicating assis
     { type: "assistant", text: "テストを実行します。" },
   ]);
 });
+
+test("parseSessionJsonlHistory reads from the tail of large session logs", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "codex-session-history-"));
+  const file = path.join(dir, "large-rollout-test-thread.jsonl");
+  const oldRows = Array.from({ length: 200 }, (_, index) =>
+    JSON.stringify({ type: "event_msg", payload: { type: "agent_message", message: `old ${index}` } }),
+  );
+  const recentRows = [
+    JSON.stringify({ type: "event_msg", payload: { type: "user_message", message: "recent user" } }),
+    JSON.stringify({ type: "event_msg", payload: { type: "agent_message", message: "recent assistant" } }),
+  ];
+  fs.writeFileSync(file, `${oldRows.join("\n")}\n${recentRows.join("\n")}\n`);
+
+  assert.deepEqual(parseSessionJsonlHistory(file, { limit: 2, maxBytes: 512 }), [
+    { type: "user", text: "recent user" },
+    { type: "assistant", text: "recent assistant" },
+  ]);
+});

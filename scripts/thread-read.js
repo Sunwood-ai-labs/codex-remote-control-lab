@@ -96,10 +96,11 @@ function snapshotFromThread({ thread, threadId, historyFromThread }) {
   };
 }
 
-function historySignature(history = []) {
-  return history
-    .map((entry) => `${entry?.type || ""}:${entry?.text || ""}`)
-    .join("\n");
+function sameHistory(left = [], right = []) {
+  return left.length === right.length && left.every((entry, index) => {
+    const other = right[index] || {};
+    return entry?.type === other.type && entry?.text === other.text;
+  });
 }
 
 async function readThreadSnapshot({ threadId, liveBridge, request, model, workdir, historyFromThread, refreshLiveBridge = false }) {
@@ -126,14 +127,11 @@ async function readThreadSnapshot({ threadId, liveBridge, request, model, workdi
   }
 
   const refreshedSnapshot = snapshotFromThread({ thread, threadId, historyFromThread });
-  if (
-    liveSnapshot &&
-    !refreshedSnapshot.history.length &&
-    refreshedSnapshot.history.length <= liveSnapshot.history.length
-  ) {
-    return liveSnapshot;
+  if (liveSnapshot) {
+    if (!refreshedSnapshot.history.length) return liveSnapshot;
+    if (refreshedSnapshot.history.length < liveSnapshot.history.length) return liveSnapshot;
+    if (sameHistory(refreshedSnapshot.history, liveSnapshot.history)) return liveSnapshot;
   }
-  if (liveSnapshot && historySignature(refreshedSnapshot.history) === historySignature(liveSnapshot.history)) return liveSnapshot;
   return refreshedSnapshot;
 }
 
