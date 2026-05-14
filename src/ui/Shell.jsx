@@ -140,7 +140,6 @@ function Composer() {
     <form id="composer" className="composer">
       <input id="fileInput" className="hidden" type="file" accept="image/*" multiple />
       <div id="attachments" className="attachments" aria-live="polite" />
-      <div id="slashSuggestions" className="slash-suggestions hidden" />
       <textarea id="prompt" rows="2" placeholder="フォローアップの変更を求める" aria-label="Codex へのメッセージ" />
       <div className="composer-footer">
         <div className="composer-left">

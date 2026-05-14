@@ -22,7 +22,6 @@ If you find a security issue, open a private advisory or contact the repository 
 - Stop the bridge with `Ctrl+C`; closing the terminal or restarting the PC stops the process.
 - Do not expose the bridge through an unauthenticated public tunnel or raw port forward.
 - Run the bridge from a normal user account, not a root/admin shell.
-- Local slash command extensions are prompt-only. The bridge does not load local shell-command extensions, and `/api/slash-commands` returns display metadata only, not prompt templates or command bodies.
 - Send startup notifications only to private/protected notification accounts, topics, or channels.
 - Rotate `PHONE_TOKEN` or delete `.phone-token` after demos on shared networks.
 - Prefer SSH forwarding, a VPN, or a mesh network for access outside the local LAN.
