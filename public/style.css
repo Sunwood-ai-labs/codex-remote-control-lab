@@ -1079,7 +1079,7 @@ p {
   text-overflow: clip;
   white-space: nowrap;
   color: color-mix(in srgb, var(--muted) 72%, var(--text));
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  font-family: inherit;
   font-size: 13px;
   font-weight: 450;
   line-height: 18px;
@@ -1109,6 +1109,7 @@ p {
   padding: 1px 6px;
   color: color-mix(in srgb, var(--muted) 78%, var(--text));
   background: color-mix(in srgb, var(--soft) 44%, transparent);
+  font-family: inherit;
   font-size: 10px;
   font-weight: 650;
   line-height: 1;

@@ -243,7 +243,8 @@ test("terminal mode is hidden until selected and uses native terminal viewport",
   assert.match(css, /\.pathbar-color-input \{[\s\S]*display: none;/);
   assert.match(css, /\.pathbar \{[\s\S]*background:[\s\S]*var\(--surface-raised\) 70%/);
   assert.match(css, /\.pathbar \{[\s\S]*box-shadow:/);
-  assert.match(css, /\.header-cwd \{[\s\S]*overflow-x: auto;[\s\S]*text-overflow: clip;[\s\S]*font-size: 13px;[\s\S]*font-weight: 450;/);
+  assert.match(css, /\.header-cwd \{[\s\S]*overflow-x: auto;[\s\S]*text-overflow: clip;[\s\S]*font-family: inherit;[\s\S]*font-size: 13px;[\s\S]*font-weight: 450;/);
+  assert.match(css, /\.pathbar-label \{[\s\S]*font-family: inherit;[\s\S]*font-size: 10px;/);
   assert.match(css, /body\[data-main-mode="terminal"\] \.titlebar \{/);
   assert.match(css, /@media \(max-width: 520px\) \{[\s\S]*\.titlebar-mode-icon,[\s\S]*\.title-status \{[\s\S]*display: none;/);
   assert.match(css, /\.terminal-mode \{[\s\S]*display: none;/);
