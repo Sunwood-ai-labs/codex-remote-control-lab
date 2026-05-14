@@ -116,6 +116,7 @@ let lastReviewDigestSignature = "";
 let slashSkillMenu = null;
 let slashSkills = [];
 let slashSkillsLoaded = false;
+let slashSkillsPromise = null;
 let slashActiveIndex = 0;
 let activeSlashMatch = null;
 
@@ -1306,10 +1307,17 @@ function slashTriggerMatch() {
 
 async function loadSlashSkills() {
   if (slashSkillsLoaded) return slashSkills;
-  const result = await apiGet("/api/skills");
-  slashSkills = result.data || [];
-  slashSkillsLoaded = true;
-  return slashSkills;
+  if (slashSkillsPromise) return slashSkillsPromise;
+  slashSkillsPromise = apiGet("/api/skills")
+    .then((result) => {
+      slashSkills = result.data || [];
+      slashSkillsLoaded = true;
+      return slashSkills;
+    })
+    .finally(() => {
+      slashSkillsPromise = null;
+    });
+  return slashSkillsPromise;
 }
 
 function filterSlashSkills(query) {

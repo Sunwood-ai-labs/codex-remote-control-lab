@@ -16,6 +16,7 @@ const {
   installedLocalSkillEntries,
   installedSkillsFromPluginMarketplaces,
   mergeSkillEntries,
+  parseRefreshCommand,
   reviewSummary,
   safeOpenPath,
 } = require("./start-phone");
@@ -139,4 +140,12 @@ test("mergeSkillEntries returns plugin and local skills together", () => {
     skills.map((skill) => skill.trigger),
     ["/browser-use:browser", "/gh-release-notes"],
   );
+});
+
+test("parseRefreshCommand rejects shell metacharacters and returns argv", () => {
+  assert.deepEqual(parseRefreshCommand("node scripts/read-desktop-rate-limits.js"), {
+    command: "node",
+    args: ["scripts/read-desktop-rate-limits.js"],
+  });
+  assert.throws(() => parseRefreshCommand("node scripts/read-desktop-rate-limits.js | cat"), /shell metacharacters/);
 });

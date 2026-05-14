@@ -360,14 +360,28 @@ function writeRateLimitCache(provider, snapshot) {
   }
 }
 
+function parseRefreshCommand(command) {
+  const input = String(command || "").trim();
+  if (!input) return null;
+  if (/[|&;<>()`$\\\r\n]/.test(input)) throw new Error("rate limit command must not use shell metacharacters");
+  const parts = input.match(/"([^"]*)"|'([^']*)'|\S+/g)?.map((part) => part.replace(/^["']|["']$/g, "")) || [];
+  if (!parts.length) return null;
+  return { command: parts[0], args: parts.slice(1) };
+}
+
 function runRateLimitRefreshCommand(provider, command) {
   return new Promise((resolve, reject) => {
     let stdout = "";
     let stderr = "";
-    const child = spawn(command, {
+    const parsed = parseRefreshCommand(command);
+    if (!parsed) {
+      reject(new Error("rate limit command is empty"));
+      return;
+    }
+    const child = spawn(parsed.command, parsed.args, {
       cwd: root,
       env: process.env,
-      shell: true,
+      shell: false,
       stdio: ["ignore", "pipe", "pipe"],
     });
     const timer = setTimeout(() => {
@@ -1865,7 +1879,14 @@ class ClaudeBridge {
       env: process.env,
       stdio: ["pipe", "pipe", "pipe"],
     });
-    child.stdin.end(promptText);
+    child.stdin.on("error", (error) => {
+      this.emit("status", { text: `Claude prompt input closed early: ${error.message}` });
+    });
+    try {
+      child.stdin.end(promptText);
+    } catch (error) {
+      this.emit("status", { text: `Claude prompt input failed: ${error.message}` });
+    }
     this.activeProcess = child;
     let stdoutBuffer = "";
     let stderrBuffer = "";
@@ -2349,6 +2370,7 @@ if (require.main === module) {
     installedLocalSkillEntries,
     installedSkillsFromPluginMarketplaces,
     mergeSkillEntries,
+    parseRefreshCommand,
     relativeDisplayPath,
     reviewSummary,
     runGit,
