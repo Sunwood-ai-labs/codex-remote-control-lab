@@ -57,7 +57,7 @@ const rightResizeHandle = document.querySelector("#rightResizeHandle");
 
 const params = new URLSearchParams(location.search);
 const token = params.get("token") || localStorage.getItem("codexPhoneToken") || "";
-let selectedThread = params.get("thread") || "";
+let selectedThread = params.get("thread") || localStorage.getItem("codexPhoneLastThread") || "";
 let activeProvider = "codex";
 let threadProvider = params.get("provider") || "";
 let tokenRequired = true;
@@ -1250,7 +1250,9 @@ function recoverMissingSelectedThread(message) {
 }
 
 function syncReadyThread(threadId) {
-  if (!threadId || selectedThread === threadId) return;
+  if (!threadId) return;
+  localStorage.setItem("codexPhoneLastThread", threadId);
+  if (selectedThread === threadId) return;
   selectedThread = threadId;
   updateUrlThread();
   const selected = threadCache.find((thread) => thread.id === selectedThread);
@@ -1260,6 +1262,8 @@ function syncReadyThread(threadId) {
 
 function selectThread(threadId) {
   selectedThread = threadId;
+  if (threadId) localStorage.setItem("codexPhoneLastThread", threadId);
+  else localStorage.removeItem("codexPhoneLastThread");
   updateUrlThread();
   renderThreadList();
   closeSidebar();

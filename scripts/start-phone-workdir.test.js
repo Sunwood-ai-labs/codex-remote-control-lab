@@ -12,16 +12,22 @@ process.env.CODEX_WORKDIR = workdir;
 process.env.CODEX_HOME = path.join(tempRoot, "codex-home");
 
 const {
+  clearLastThreadId,
   discoverWorkspaceEntries,
   installedLocalSkillEntries,
   installedSkillsFromPluginMarketplaces,
+  isMissingThreadError,
   mergeSkillEntries,
   parseRefreshCommand,
   readDirectoryListing,
+  readLastThreadCwd,
+  readLastThreadId,
   readSkills,
   reviewSummary,
   safeDirectoryPath,
   safeOpenPath,
+  writeLastThreadCwd,
+  writeLastThreadId,
 } = require("./start-phone");
 
 function runGit(args) {
@@ -68,6 +74,43 @@ test("reviewSummary marks CODEX_WORKDIR git paths as openable", async () => {
   assert.equal(reviewFile?.kind, "markdown");
   assert.equal(spacedFile?.openable, true);
   assert.equal(spacedFile?.additions, 1);
+});
+
+test("last-thread persistence writes, reads, and clears only matching private local state", () => {
+  const threadPath = path.join(tempRoot, "last-thread");
+  const cwdPath = path.join(tempRoot, "last-thread-cwd");
+
+  assert.equal(readLastThreadId(threadPath), "");
+  assert.equal(readLastThreadCwd(cwdPath), "");
+
+  writeLastThreadId("thread-123", threadPath);
+  writeLastThreadCwd(workdir, cwdPath);
+
+  assert.equal(readLastThreadId(threadPath), "thread-123");
+  assert.equal(readLastThreadCwd(cwdPath), workdir);
+
+  clearLastThreadId(undefined, { threadPath, cwdPath });
+  assert.equal(readLastThreadId(threadPath), "thread-123");
+
+  clearLastThreadId("", { threadPath, cwdPath });
+  assert.equal(readLastThreadId(threadPath), "thread-123");
+
+  clearLastThreadId("other-thread", { threadPath, cwdPath });
+  assert.equal(readLastThreadId(threadPath), "thread-123");
+
+  clearLastThreadId("thread-123", { threadPath, cwdPath });
+  assert.equal(readLastThreadId(threadPath), "");
+  assert.equal(readLastThreadCwd(cwdPath), "");
+});
+
+test("missing thread errors are detected narrowly for stale resume recovery", () => {
+  assert.equal(isMissingThreadError("no rollout found for thread id thread-123"), true);
+  assert.equal(isMissingThreadError("Thread not found"), true);
+  assert.equal(isMissingThreadError("thread id not found"), true);
+  assert.equal(isMissingThreadError("no thread found"), true);
+  assert.equal(isMissingThreadError("connection closed"), false);
+  assert.equal(isMissingThreadError("Model not found"), false);
+  assert.equal(isMissingThreadError("API key not found"), false);
 });
 
 test("safeDirectoryPath and readDirectoryListing stay inside the provided root", () => {

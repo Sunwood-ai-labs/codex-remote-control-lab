@@ -87,6 +87,8 @@ const authMode = debugNoToken ? "debug-no-token" : "token";
 const tokenRequired = authMode === "token";
 const listenHost = tokenRequired || debugLan ? "0.0.0.0" : "127.0.0.1";
 const tokenPath = path.join(root, ".phone-token");
+const lastThreadPath = path.join(root, ".phone-thread");
+const lastThreadCwdPath = path.join(root, ".phone-thread-cwd");
 const rateLimitCacheTtlMs = positiveNumber(process.env.PHONE_RATE_LIMIT_CACHE_TTL_MS, 5 * 60 * 1000);
 const rateLimitRefreshTimeoutMs = positiveNumber(process.env.PHONE_RATE_LIMIT_REFRESH_TIMEOUT_MS, 6000);
 const uploadDir = path.join(root, ".uploads");
@@ -144,6 +146,50 @@ function getToken() {
   const token = crypto.randomBytes(18).toString("base64url");
   fs.writeFileSync(tokenPath, `${token}\n`, { mode: 0o600 });
   return token;
+}
+
+function readLastThreadId(filePath = lastThreadPath) {
+  try {
+    if (!fs.existsSync(filePath)) return "";
+    return fs.readFileSync(filePath, "utf8").trim();
+  } catch {
+    return "";
+  }
+}
+
+function writeLastThreadId(threadId, filePath = lastThreadPath) {
+  if (!threadId) return;
+  fs.writeFileSync(filePath, `${threadId}\n`, { mode: 0o600 });
+}
+
+function readLastThreadCwd(filePath = lastThreadCwdPath) {
+  try {
+    if (!fs.existsSync(filePath)) return "";
+    return fs.readFileSync(filePath, "utf8").trim();
+  } catch {
+    return "";
+  }
+}
+
+function writeLastThreadCwd(cwd, filePath = lastThreadCwdPath) {
+  if (!cwd) return;
+  fs.writeFileSync(filePath, `${cwd}\n`, { mode: 0o600 });
+}
+
+function clearLastThreadId(threadId, paths = {}) {
+  const threadPath = paths.threadPath || lastThreadPath;
+  const cwdPath = paths.cwdPath || lastThreadCwdPath;
+  try {
+    if (!threadId || readLastThreadId(threadPath) !== threadId) return;
+    if (fs.existsSync(threadPath)) fs.unlinkSync(threadPath);
+    if (fs.existsSync(cwdPath)) fs.unlinkSync(cwdPath);
+  } catch {
+    // Saved thread state is a reconnect hint; bridge startup should continue if cleanup fails.
+  }
+}
+
+function isMissingThreadError(message) {
+  return /no rollout found for thread id|thread not found|thread id not found|no thread found/i.test(String(message || ""));
 }
 
 function lanAddresses() {
@@ -1435,6 +1481,7 @@ class SharedBridge {
   constructor(requestedThreadId, bridgeKey, options = {}) {
     this.requestedThreadId = requestedThreadId;
     this.bridgeKey = bridgeKey;
+    this.fallbackOnMissingThread = Boolean(options.fallbackOnMissingThread);
     this.cwd = options.cwd || workdir;
     this.clients = new Set();
     this.nextId = 1;
@@ -1448,6 +1495,7 @@ class SharedBridge {
     this.runState = { state: "connecting", label: "接続中", turnId: null, updatedAt: Date.now() };
     this.streamingStarted = false;
     this.interruptRequested = false;
+    this.fellBackFromStaleThreadId = "";
     this.upstream = createUpstreamWebSocket();
     this.bindUpstream();
   }
@@ -1555,9 +1603,10 @@ class SharedBridge {
 
   bindUpstream() {
     this.upstream.on("open", () => {
-      this.request("initialize", {
+      const initializeId = this.request("initialize", {
         clientInfo: { name: "codex-phone-bridge", title: "Codex Phone Bridge", version: "0.1.0" },
       });
+      if (!initializeId) return;
       this.upstream.send(JSON.stringify({ method: "initialized", params: {} }));
       const method = this.requestedThreadId ? "thread/resume" : "thread/start";
       const params = this.requestedThreadId
@@ -1574,8 +1623,7 @@ class SharedBridge {
             approvalPolicy: "on-request",
             sandbox: "workspace-write",
           };
-      const id = this.request(method, params);
-      this.pending.set(id, method);
+      this.startThreadRequest(method, params);
       this.emit("status", { text: this.requestedThreadId ? "既存threadを再開中..." : "新しいthreadを開始中..." });
     });
 
@@ -1586,13 +1634,37 @@ class SharedBridge {
       if (pendingMethod === "thread/start" || pendingMethod === "thread/resume") {
         this.pending.delete(msg.id);
         if (msg.error) {
+          const text = msg.error.message || JSON.stringify(msg.error);
+          if (pendingMethod === "thread/resume" && this.fallbackOnMissingThread && isMissingThreadError(text)) {
+            this.fellBackFromStaleThreadId = this.requestedThreadId;
+            this.fallbackOnMissingThread = false;
+            clearLastThreadId(this.requestedThreadId);
+            this.requestedThreadId = "";
+            this.emit("status", { text: "保存済みthreadが見つからないため、新しいthreadを開始中..." });
+            this.startThreadRequest("thread/start", {
+              model,
+              cwd: this.cwd,
+              approvalPolicy: "on-request",
+              sandbox: "workspace-write",
+            });
+            return;
+          }
           this.startupFailed = true;
-          this.emit("error", { text: msg.error.message || JSON.stringify(msg.error) });
+          this.emit("error", { text });
           return;
         }
         this.threadId = msg.result.thread.id;
+        writeLastThreadId(this.threadId);
+        writeLastThreadCwd(this.cwd);
         if (this.requestedThreadId) {
           threadCwdMap.set(this.threadId, this.cwd);
+        }
+        if (this.fellBackFromStaleThreadId) {
+          const staleThreadId = this.fellBackFromStaleThreadId;
+          this.fellBackFromStaleThreadId = "";
+          if (bridges.get(staleThreadId) === this) bridges.delete(staleThreadId);
+          this.bridgeKey = this.threadId;
+          bridges.set(this.bridgeKey, this);
         }
         this.startupFailed = false;
         this.promoteBridgeKey();
@@ -1710,6 +1782,13 @@ class SharedBridge {
       if (!this.ready) this.startupFailed = true;
       this.markUpstreamClosed("Codex接続が閉じました。再接続ボタンを押してください。");
     });
+  }
+
+  startThreadRequest(method, params) {
+    const id = this.request(method, params);
+    if (!id) return null;
+    this.pending.set(id, method);
+    return id;
   }
 
   sendTurnInterrupt(turnId = this.activeTurnId) {
@@ -1852,14 +1931,23 @@ class SharedBridge {
 const threadCwdMap = new Map();
 
 function getBridge(threadId, connectionId = crypto.randomUUID(), options = {}) {
+  const savedCwd = readLastThreadCwd();
+  const persistedThreadId = !threadId && !options.forceNew && savedCwd === workdir ? readLastThreadId() : "";
+  const requestedThreadId = options.forceNew ? "" : threadId || persistedThreadId;
+  if (!threadId && persistedThreadId) {
+    if (bridges.has(persistedThreadId)) return bridges.get(persistedThreadId);
+    const bridge = new SharedBridge(persistedThreadId, persistedThreadId, { fallbackOnMissingThread: true, cwd: workdir });
+    bridges.set(persistedThreadId, bridge);
+    return bridge;
+  }
   if (!threadId && !options.forceNew) {
     for (const bridge of bridges.values()) {
       if (!bridge.requestedThreadId) return bridge;
     }
   }
-  const key = options.forceNew && !threadId ? `new:${connectionId}` : bridgeKeyForRequest(threadId, connectionId);
-  const cwd = options.cwd || (threadId ? threadCwdMap.get(threadId) : undefined) || workdir;
-  if (!bridges.has(key)) bridges.set(key, new SharedBridge(threadId, key, { cwd }));
+  const key = options.forceNew && !requestedThreadId ? `new:${connectionId}` : bridgeKeyForRequest(requestedThreadId, connectionId);
+  const cwd = options.cwd || (requestedThreadId ? threadCwdMap.get(requestedThreadId) : undefined) || workdir;
+  if (!bridges.has(key)) bridges.set(key, new SharedBridge(requestedThreadId, key, { cwd }));
   return bridges.get(key);
 }
 
@@ -2294,10 +2382,16 @@ if (require.main === module) {
     readSkills,
     reviewSummary,
     runGit,
+    clearLastThreadId,
+    isMissingThreadError,
+    readLastThreadCwd,
+    readLastThreadId,
     safeDirectoryPath,
     safeOpenPath,
     safePathWithin,
     safeRelativePath,
     safeWorkdirPath,
+    writeLastThreadCwd,
+    writeLastThreadId,
   };
 }
