@@ -80,6 +80,8 @@ const bridges = new Map();
 const terminalSessions = new Map();
 const sessionStates = new Map();
 const retainedSessionConfig = retentionConfigFromEnv(process.env);
+const maxSessionStates = Math.max(20, retainedSessionConfig.maxSessions * 4);
+const terminalOutputFlushMs = 16;
 const historyLimit = 80;
 const imageExtensions = new Map([
   [".png", "image/png"],
@@ -208,6 +210,7 @@ function updateSessionState(statePatch) {
   const state = mergeSessionState(previous, statePatch);
   sessionStates.set(key, state);
   if (state.cwd) sessionStates.set(stateKeyForSession("", state.cwd), state);
+  pruneSessionStates();
   broadcastSessionState(state);
   if (!isSessionBusy(state)) {
     for (const bridge of bridges.values()) {
@@ -215,6 +218,17 @@ function updateSessionState(statePatch) {
     }
   }
   return state;
+}
+
+function pruneSessionStates() {
+  if (sessionStates.size <= maxSessionStates) return;
+  const entries = Array.from(sessionStates.entries()).sort((left, right) => {
+    return Number(left[1]?.updatedAt || 0) - Number(right[1]?.updatedAt || 0);
+  });
+  while (sessionStates.size > maxSessionStates && entries.length) {
+    const [key] = entries.shift();
+    sessionStates.delete(key);
+  }
 }
 
 class AppServerRpcClient {
@@ -1332,6 +1346,8 @@ class TerminalPtySession {
     this.updatedAt = this.createdAt;
     this.lastAccessAt = this.createdAt;
     this.idleDeadlineAt = 0;
+    this.outputQueue = "";
+    this.outputFlushTimer = null;
     this.proc = this.spawn(cols, rows);
   }
 
@@ -1352,11 +1368,9 @@ class TerminalPtySession {
       },
       name: "xterm-256color",
     });
-    proc.onData((data) => {
-      this.appendBuffer(data);
-      this.broadcast({ type: "output", data });
-    });
+    proc.onData((data) => this.enqueueOutput(data));
     proc.onExit(({ exitCode, signal }) => {
+      this.flushOutput();
       this.closed = true;
       this.broadcast({ type: "exit", code: exitCode, signal });
       terminalSessions.delete(terminalKeyFor(this.threadId, this.cwd));
@@ -1368,6 +1382,25 @@ class TerminalPtySession {
     this.noteActivity();
     this.buffer += data;
     if (this.buffer.length > 240_000) this.buffer = this.buffer.slice(-200_000);
+  }
+
+  enqueueOutput(data) {
+    this.appendBuffer(data);
+    this.outputQueue += data;
+    if (this.outputFlushTimer) return;
+    this.outputFlushTimer = setTimeout(() => this.flushOutput(), terminalOutputFlushMs);
+    this.outputFlushTimer.unref?.();
+  }
+
+  flushOutput() {
+    if (this.outputFlushTimer) {
+      clearTimeout(this.outputFlushTimer);
+      this.outputFlushTimer = null;
+    }
+    if (!this.outputQueue) return;
+    const data = this.outputQueue;
+    this.outputQueue = "";
+    this.broadcast({ type: "output", data });
   }
 
   addClient(ws) {
@@ -1460,6 +1493,7 @@ class TerminalPtySession {
     if (this.closed) return;
     this.closed = true;
     this.cancelIdleCleanup();
+    this.flushOutput();
     try {
       this.proc.kill("SIGTERM");
     } catch {}
@@ -1837,10 +1871,20 @@ async function main() {
     });
   });
 
-  process.on("exit", () => {
+  const cleanup = () => {
     if (codex) codex.kill("SIGINT");
     for (const session of terminalSessions.values()) session.terminate();
-  });
+  };
+  let shuttingDown = false;
+  const shutdown = () => {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    cleanup();
+    process.exit();
+  };
+  process.on("exit", cleanup);
+  process.once("SIGINT", shutdown);
+  process.once("SIGTERM", shutdown);
 }
 
 if (require.main === module) {

@@ -164,11 +164,16 @@ test("phone bridge exposes a PTY terminal websocket instead of smart-cli iframe 
   assert.match(server, /\/api\/codex-hook/);
   assert.match(server, /normalizeHookState/);
   assert.match(server, /sessionState/);
+  assert.match(server, /pruneSessionStates/);
   assert.match(server, /pty\.spawn\(executable, args/);
+  assert.match(server, /enqueueOutput\(data\)/);
+  assert.match(server, /flushOutput\(\)/);
   assert.match(server, /function isTerminalInterruptInput\(data\)/);
   assert.match(server, /text === "\\u001b" \|\| text\.includes\("\\u0003"\)/);
   assert.match(server, /url\.pathname !== "\/bridge" && url\.pathname !== "\/terminal"/);
   assert.match(server, /bindTerminalSocket/);
+  assert.match(server, /process\.once\("SIGINT", shutdown\)/);
+  assert.match(server, /process\.once\("SIGTERM", shutdown\)/);
   assert.doesNotMatch(server, /SMART_CLI_URL/);
   assert.doesNotMatch(server, /SMART_CLI_PORT/);
   assert.doesNotMatch(server, /smartCliUrl/);
