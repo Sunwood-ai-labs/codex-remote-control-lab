@@ -39,7 +39,8 @@ test("Shell renders chat/terminal mode controls on the same remote session surfa
   assert.match(shell, /className="pathbar"/);
   assert.match(shell, /className="pathbar-label">pwd/);
   assert.match(shell, /id="pathbarColorPicker"/);
-  assert.match(shell, /className="pathbar-color-chip"/);
+  assert.match(shell, /className="pathbar-color-input"/);
+  assert.match(shell, /hidden/);
   assert.match(shell, /id="headerCwd"/);
   assert.match(shell, /className="title-identity"/);
   assert.match(shell, /className="titlebar-mode-icon"/);
@@ -213,7 +214,7 @@ test("terminal mode is hidden until selected and uses native terminal viewport",
   const css = read("public/style.css");
   assert.match(css, /\.mode-stage \{/);
   assert.match(css, /body\.terminal-touch-lock,[\s\S]+touch-action: none;/);
-  assert.match(css, /grid-template-rows: 96px minmax\(0, 1fr\);/);
+  assert.match(css, /grid-template-rows: 86px minmax\(0, 1fr\);/);
   assert.match(css, /\.titlebar-main \{/);
   assert.match(css, /\.session-create-page,/);
   assert.match(css, /\.session-create-body \{/);
@@ -238,12 +239,11 @@ test("terminal mode is hidden until selected and uses native terminal viewport",
   assert.match(css, /\.title-status \{/);
   assert.match(css, /\.side-menu-button \{/);
   assert.match(css, /\.pathbar \{/);
-  assert.match(css, /--pathbar-color: #4f8cff;/);
-  assert.match(css, /\.pathbar-color-picker \{/);
-  assert.match(css, /\.pathbar-color-chip \{/);
-  assert.match(css, /\.pathbar \{[\s\S]*background:[\s\S]*var\(--pathbar-color\) 38%/);
+  assert.match(css, /--pathbar-color: #8ba1c0;/);
+  assert.match(css, /\.pathbar-color-input \{[\s\S]*display: none;/);
+  assert.match(css, /\.pathbar \{[\s\S]*background:[\s\S]*var\(--surface-raised\) 70%/);
   assert.match(css, /\.pathbar \{[\s\S]*box-shadow:/);
-  assert.match(css, /\.header-cwd \{[\s\S]*overflow-x: auto;[\s\S]*text-overflow: clip;[\s\S]*font-size: 15px;/);
+  assert.match(css, /\.header-cwd \{[\s\S]*overflow-x: auto;[\s\S]*text-overflow: clip;[\s\S]*font-size: 13px;[\s\S]*font-weight: 450;/);
   assert.match(css, /body\[data-main-mode="terminal"\] \.titlebar \{/);
   assert.match(css, /@media \(max-width: 520px\) \{[\s\S]*\.titlebar-mode-icon,[\s\S]*\.title-status \{[\s\S]*display: none;/);
   assert.match(css, /\.terminal-mode \{[\s\S]*display: none;/);

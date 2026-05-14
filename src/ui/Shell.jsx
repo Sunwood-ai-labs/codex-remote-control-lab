@@ -122,10 +122,14 @@ function Header() {
           </button>
         </div>
         <div className="title-actions">
-          <label className="pathbar-color-picker" title="pathbar の色" aria-label="pathbar の色">
-            <input id="pathbarColorPicker" type="color" defaultValue="#4f8cff" />
-            <span className="pathbar-color-chip" aria-hidden="true" />
-          </label>
+          <input
+            id="pathbarColorPicker"
+            className="pathbar-color-input"
+            type="color"
+            defaultValue="#8ba1c0"
+            aria-label="pathbar の色"
+            hidden
+          />
           <button id="connect" type="button" className="icon-button" title="再接続" aria-label="再接続"><RefreshCw size={16} strokeWidth={1.9} /></button>
           <button type="button" className="icon-button" id="menuButton" title="右パネルを開閉" aria-label="右パネルを開閉" aria-controls="artifactPanel" aria-expanded="false"><MoreHorizontal size={18} strokeWidth={2} /></button>
         </div>

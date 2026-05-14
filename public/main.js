@@ -187,7 +187,7 @@ let sessionBrowserParentPath = "";
 let sessionShowHidden = false;
 let sessionBrowserEntries = [];
 const pathbarColorStorageKey = "codexPathbarColorsByCwd";
-const defaultPathbarColor = "#4f8cff";
+const defaultPathbarColor = "#8ba1c0";
 let pathbarColorsByCwd = readPathbarColors();
 let accessMode = {
   label: "フルアクセス",
