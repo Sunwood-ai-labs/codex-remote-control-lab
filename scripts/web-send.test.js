@@ -69,10 +69,19 @@ async function mockApi(page, state = {}) {
       await route.fulfill({ json: { data: threads, threads } });
       return;
     }
+    if (url.pathname === "/api/live-threads") {
+      const liveThreads = state.liveThreads || [];
+      await route.fulfill({ json: { data: liveThreads, provider: "codex", activeProvider: "codex" } });
+      return;
+    }
     if (url.pathname === "/api/thread") {
       const threadId = url.searchParams.get("thread");
       const delay = state.threadDelays?.[threadId] || 0;
       if (delay) await new Promise((resolve) => setTimeout(resolve, delay));
+      if (state.threadErrors?.[threadId]) {
+        await route.fulfill({ status: 404, json: { error: state.threadErrors[threadId] } });
+        return;
+      }
       await route.fulfill({
         json: state.threadSnapshots?.[threadId] || { threadId, history: [] },
       });
@@ -237,6 +246,77 @@ test("background thread polling stays quiet after browser bridge disconnects", a
   const logText = await page.locator("#log").innerText();
   assert.doesNotMatch(logText, /thread一覧を読めませんでした: Failed to fetch/);
   assert.equal(await page.locator("#runState").getAttribute("data-state"), "disconnected");
+});
+
+test("thread list shows only active live threads for Codex", async (t) => {
+  const server = await startStaticServer();
+  let browser;
+  t.after(async () => {
+    if (browser) await browser.close();
+    await server.close();
+  });
+
+  browser = await chromium.launch();
+  const page = await browser.newPage({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 1 });
+  await mockApi(page, {
+    threads: [{ id: "stored-thread", cwd: "/tmp/example-project", preview: "stored only", updatedAt: 1000 }],
+    liveThreads: [{ id: "live-thread", cwd: "/tmp/example-project", preview: "live now", updatedAt: 2000 }],
+  });
+  await mockWebSocket(page);
+  const url = new URL(server.origin);
+  url.searchParams.set("token", token);
+  await page.goto(url.toString(), { waitUntil: "networkidle" });
+  await page.waitForSelector("#send:not([disabled])");
+
+  const titles = await page.locator(".thread-title").allInnerTexts();
+
+  assert.deepEqual(titles, ["live now"]);
+});
+
+test("missing rollout thread clears stale selection and reconnects cleanly", async (t) => {
+  const server = await startStaticServer();
+  let browser;
+  t.after(async () => {
+    if (browser) await browser.close();
+    await server.close();
+  });
+
+  browser = await chromium.launch();
+  const page = await browser.newPage({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 1 });
+  await mockApi(page, {
+    threadErrors: {
+      "stale-thread": "no rollout found for thread id stale-thread",
+    },
+  });
+  await mockWebSocket(page, {
+    readyPayloadByThread: {
+      "stale-thread": {
+        type: "error",
+        text: "no rollout found for thread id stale-thread",
+      },
+    },
+    defaultReadyPayload: {
+      type: "ready",
+      threadId: "fresh-thread",
+      history: [],
+      model: "gpt-5.5",
+      clients: 1,
+      workdir: root,
+    },
+  });
+  const url = new URL(server.origin);
+  url.searchParams.set("token", token);
+  url.searchParams.set("thread", "stale-thread");
+  await page.goto(url.toString(), { waitUntil: "networkidle" });
+  await page.waitForSelector("#send:not([disabled])");
+  await page.waitForFunction(() => new URL(location.href).searchParams.get("thread") !== "stale-thread");
+
+  const logText = await page.locator("#log").innerText();
+  const socketUrls = await page.evaluate(() => window.__mockSocketUrls);
+
+  assert.doesNotMatch(logText, /thread更新を読めませんでした/);
+  assert.ok(socketUrls.some((item) => item.includes("thread=stale-thread")));
+  assert.ok(socketUrls.some((item) => !item.includes("thread=stale-thread")));
 });
 
 test("mobile text inputs keep iOS-safe font sizes without disabling zoom", async (t) => {
@@ -621,6 +701,10 @@ test("thread switching keeps a transition entry until target history is ready", 
       { id: "thread-a", name: "Thread A", cwd: root, updatedAt: Date.now() },
       { id: "thread-b", name: "Thread B", cwd: root, updatedAt: Date.now() },
     ],
+    liveThreads: [
+      { id: "thread-a", name: "Thread A", cwd: root, updatedAt: Date.now() },
+      { id: "thread-b", name: "Thread B", cwd: root, updatedAt: Date.now() },
+    ],
     threadDelays: { "thread-b": 160 },
     threadSnapshots: {
       "thread-b": {
@@ -695,6 +779,10 @@ test("slower thread snapshot does not overwrite ready thread history", async (t)
       { id: "thread-a", name: "Thread A", cwd: root, updatedAt: Date.now() },
       { id: "thread-b", name: "Thread B", cwd: root, updatedAt: Date.now() },
     ],
+    liveThreads: [
+      { id: "thread-a", name: "Thread A", cwd: root, updatedAt: Date.now() },
+      { id: "thread-b", name: "Thread B", cwd: root, updatedAt: Date.now() },
+    ],
     threadDelays: { "thread-b": 460 },
     threadSnapshots: {
       "thread-b": {
@@ -751,6 +839,10 @@ test("stale WebSocket ready messages from previous switches are ignored", async 
   const page = await browser.newPage({ viewport: { width: 1280, height: 844 }, deviceScaleFactor: 1 });
   const apiState = {
     threads: [
+      { id: "thread-a", name: "Thread A", cwd: root, updatedAt: Date.now() },
+      { id: "thread-b", name: "Thread B", cwd: root, updatedAt: Date.now() },
+    ],
+    liveThreads: [
       { id: "thread-a", name: "Thread A", cwd: root, updatedAt: Date.now() },
       { id: "thread-b", name: "Thread B", cwd: root, updatedAt: Date.now() },
     ],

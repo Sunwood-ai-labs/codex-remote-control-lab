@@ -9,7 +9,7 @@ const WebSocket = require("ws");
 const { bridgeKeyForRequest, shouldDisposeIdleBridge, shouldPromoteBridgeKey } = require("./bridge-state");
 const { isHistorySyncEnabled, runHistorySync } = require("./history-sync");
 const { bridgeUrls, notifyBridgeUrls, notifyTaskEvent } = require("./phone-notify");
-const { findLiveBridge, readThreadSnapshot } = require("./thread-read");
+const { findLiveBridge, liveThreadSummaries, readThreadSnapshot } = require("./thread-read");
 
 const root = path.resolve(__dirname, "..");
 
@@ -2062,6 +2062,21 @@ async function main() {
       }
       return;
     }
+    if (url.pathname === "/api/live-threads") {
+      if (!requireToken(url, phoneToken, res)) return;
+      const requestedProvider = queryProvider(url, res);
+      if (!requestedProvider) return;
+      if (requestedProvider !== "codex") {
+        sendJson(res, 200, { provider: requestedProvider, activeProvider: agentProvider, data: [] });
+        return;
+      }
+      sendJson(res, 200, {
+        provider: requestedProvider,
+        activeProvider: agentProvider,
+        data: liveThreadSummaries(bridges),
+      });
+      return;
+    }
     if (url.pathname === "/api/models") {
       if (!requireToken(url, phoneToken, res)) return;
       if (isClaudeProvider) {
@@ -2215,6 +2230,7 @@ async function main() {
           model,
           workdir,
           historyFromThread,
+          refreshLiveBridge: true,
         });
         sendJson(res, 200, { provider: requestedProvider, activeProvider: agentProvider, ...snapshot });
       } catch (error) {

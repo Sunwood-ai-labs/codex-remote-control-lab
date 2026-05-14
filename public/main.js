@@ -1153,7 +1153,8 @@ async function loadThreads({ background = false } = {}) {
   if (tokenRequired && !token) return;
   try {
     const provider = currentThreadProvider();
-    const result = await apiGet(`/api/threads?provider=${encodeURIComponent(provider)}`);
+    const endpoint = provider === "codex" ? "/api/live-threads" : "/api/threads";
+    const result = await apiGet(`${endpoint}?provider=${encodeURIComponent(provider)}`);
     if (result.activeProvider) setActiveProvider(result.activeProvider);
     threadCache = (result.data || []).map((thread) => ({ ...thread, provider: result.provider || provider }));
     renderThreadList();
@@ -1185,6 +1186,7 @@ async function refreshSelectedThread() {
     lastThreadRefreshError = "";
   } catch (error) {
     const message = error.message || String(error);
+    if (recoverMissingSelectedThread(message)) return;
     if (shouldSuppressBackgroundFetchError(message)) return;
     if (message !== lastThreadRefreshError) {
       lastThreadRefreshError = message;
@@ -1212,6 +1214,36 @@ function updateUrlThread() {
   if (currentThreadProvider() !== "codex") next.searchParams.set("provider", currentThreadProvider());
   else next.searchParams.delete("provider");
   history.replaceState(null, "", next);
+}
+
+function isMissingThreadError(message) {
+  return /no rollout found for thread id|thread not found|no thread found/i.test(String(message || ""));
+}
+
+function clearSelectedThread({ reason = "" } = {}) {
+  const previousThread = selectedThread;
+  selectedThread = "";
+  lastThreadRefreshError = "";
+  liveTurnActive = false;
+  selectedThreadRefreshActive = false;
+  updateUrlThread();
+  renderHistory([]);
+  renderThreadList();
+  threadTitle.textContent = "新しい共有thread";
+  if (reason) addEntry("status", reason);
+  return previousThread;
+}
+
+function recoverMissingSelectedThread(message) {
+  const staleThread = selectedThread;
+  if (!staleThread || !isMissingThreadError(message)) return false;
+  clearSelectedThread({ reason: `存在しないthreadを解除しました: ${staleThread}` });
+  if (ws) {
+    ws.close();
+    ws = null;
+  }
+  connect();
+  return true;
 }
 
 function syncReadyThread(threadId) {
@@ -2055,6 +2087,7 @@ function connect() {
       return;
     }
     if (msg.type === "error") {
+      if (recoverMissingSelectedThread(msg.text)) return;
       const problem = normalizeUiError(msg.text || msg);
       setRunState(problem.state, problem.text);
       addEntry(problem.kind, problem.text);
