@@ -89,6 +89,28 @@ test("liveThreadSummaries returns only active bridge sessions", () => {
   assert.equal(summaries[0].updatedAt, 2500);
 });
 
+test("liveThreadSummaries excludes retained bridges without connected clients", () => {
+  const bridges = new Map([
+    [
+      "thread-retained",
+      {
+        threadId: "thread-retained",
+        requestedThreadId: null,
+        cwd: "/tmp/project-a",
+        ready: true,
+        clients: new Set(),
+        history: [{ type: "user", text: "retained thread" }],
+        createdAt: 1000,
+        updatedAt: 2000,
+      },
+    ],
+  ]);
+
+  const summaries = liveThreadSummaries(bridges, { now: 3000 });
+
+  assert.equal(summaries.length, 0);
+});
+
 test("liveThreadSummaries includes starting non-failed bridge sessions", () => {
   const bridges = new Map([
     [
@@ -98,7 +120,7 @@ test("liveThreadSummaries includes starting non-failed bridge sessions", () => {
         requestedThreadId: "thread-starting",
         cwd: "/tmp/project-a",
         ready: false,
-        clients: new Set(),
+        clients: new Set(["browser"]),
         history: [],
         createdAt: 1000,
       },

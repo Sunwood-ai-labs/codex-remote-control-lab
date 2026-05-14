@@ -514,7 +514,22 @@ function mergeThreadRows(historyRows = [], liveRows = []) {
   }
   for (const thread of liveRows) {
     if (!thread?.id) continue;
-    merged.set(thread.id, { ...(merged.get(thread.id) || {}), ...thread, live: true });
+    const existing = merged.get(thread.id);
+    if (existing) {
+      merged.set(thread.id, {
+        ...existing,
+        cwd: existing.cwd || thread.cwd || "",
+        ready: thread.ready,
+        clients: thread.clients,
+        status: thread.status,
+        sessionState: thread.sessionState,
+        source: thread.source || existing.source,
+        live: true,
+        updatedAt: Math.max(Number(existing.updatedAt || 0), Number(thread.updatedAt || 0)),
+      });
+    } else {
+      merged.set(thread.id, { ...thread, live: true });
+    }
   }
   return Array.from(merged.values()).sort((left, right) => {
     return Number(right.updatedAt || right.createdAt || 0) - Number(left.updatedAt || left.createdAt || 0);
@@ -1483,18 +1498,23 @@ function syncReadyThread(threadId, options = {}) {
   if (!threadId) return;
   selectedThread = threadId;
   updateUrlThread();
+  threadCache = threadCache.map((thread) => {
+    if (thread.id === threadId || !thread.live) return thread;
+    const { live, ready, clients, ...historyThread } = thread;
+    return historyThread;
+  });
   const existingIndex = threadCache.findIndex((thread) => thread.id === threadId);
   const liveThread = {
     id: threadId,
     threadId,
     cwd: currentWorkdir,
-    preview: "稼働中スレッド",
     status: remoteSessionState?.status || "ready",
     ready: true,
+    live: true,
     updatedAt: Date.now(),
   };
   if (existingIndex >= 0) threadCache[existingIndex] = { ...threadCache[existingIndex], ...liveThread };
-  else threadCache.unshift(liveThread);
+  else threadCache.unshift({ ...liveThread, preview: "稼働中スレッド" });
   const selected = threadCache.find((thread) => thread.id === selectedThread);
   threadTitle.textContent = selected ? titleForThread(selected) : selectedThread;
   addOrUpdateOpenSession({

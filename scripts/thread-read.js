@@ -46,6 +46,8 @@ function liveThreadSummaries(bridges, options = {}) {
 
   for (const bridge of bridges?.values?.() || []) {
     if (!bridge || bridge.startupFailed) continue;
+    const clients = clientCountForBridge(bridge);
+    if (clients <= 0) continue;
     const id = bridge.threadId || bridge.requestedThreadId || "";
     if (!id) continue;
     const cwd = bridge.cwd || "";
@@ -62,7 +64,7 @@ function liveThreadSummaries(bridges, options = {}) {
       name: null,
       preview: previewFromHistory(bridge.history) || (bridge.ready ? "稼働中スレッド" : "起動中"),
       ready: !!bridge.ready,
-      clients: clientCountForBridge(bridge),
+      clients,
       status: sessionState?.status || (bridge.ready ? "input_ready" : "starting"),
       sessionState,
       updatedAt,
