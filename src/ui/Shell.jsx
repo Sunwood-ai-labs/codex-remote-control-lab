@@ -103,6 +103,11 @@ function Header() {
           </span>
           <div className="title-stack">
             <h1 id="threadTitle">Codex Remote</h1>
+            <div className="session-swipe-hint" id="sessionSwipeHint" aria-label="スワイプできる稼働中スレッド">
+              <span className="session-swipe-arrow" id="sessionSwipePrev" aria-hidden="true">右で前</span>
+              <span className="session-swipe-label" id="sessionSwipeLabel">1件のみ</span>
+              <span className="session-swipe-arrow" id="sessionSwipeNext" aria-hidden="true">左で次</span>
+            </div>
             <div className="title-status">
               <span className="screen-pill screen-pill-chat">Chat</span>
               <span className="screen-pill screen-pill-terminal">Terminal</span>

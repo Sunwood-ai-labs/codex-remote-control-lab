@@ -60,6 +60,10 @@ const threadSearch = document.querySelector("#threadSearch");
 const threadTitle = document.querySelector("#threadTitle");
 const sessionSwitcher = document.querySelector("#sessionSwitcher");
 const sessionCountPill = document.querySelector("#sessionCountPill");
+const sessionSwipeHint = document.querySelector("#sessionSwipeHint");
+const sessionSwipePrev = document.querySelector("#sessionSwipePrev");
+const sessionSwipeLabel = document.querySelector("#sessionSwipeLabel");
+const sessionSwipeNext = document.querySelector("#sessionSwipeNext");
 const sessionCreatePage = document.querySelector("#sessionCreatePage");
 const sessionCreateCancel = document.querySelector("#sessionCreateCancel");
 const sessionSelectedCwd = document.querySelector("#sessionSelectedCwd");
@@ -131,6 +135,19 @@ window.addEventListener("orientationchange", () => setTimeout(resetViewportScale
 document.addEventListener("visibilitychange", () => {
   if (document.visibilityState === "visible") resetViewportScaleAfterInput();
 });
+
+const logAutoScrollThresholdPx = 72;
+
+function shouldAutoScrollLog() {
+  if (!log) return false;
+  const distanceFromBottom = log.scrollHeight - log.clientHeight - log.scrollTop;
+  return distanceFromBottom <= logAutoScrollThresholdPx;
+}
+
+function scrollLogToBottomIfNeeded(shouldScroll = shouldAutoScrollLog()) {
+  if (!shouldScroll || !log) return;
+  log.scrollTop = log.scrollHeight;
+}
 
 const themeOptions = [
   { id: "simple", name: "シンプル", detail: "静かなローカルコンソール" },
@@ -288,9 +305,24 @@ function pathbarColorFor(cwd = currentWorkdir) {
   return isHexColor(saved) ? saved : defaultPathbarColor;
 }
 
+function textColorForBackground(hexColor) {
+  const value = String(hexColor || "").replace("#", "");
+  const red = parseInt(value.slice(0, 2), 16);
+  const green = parseInt(value.slice(2, 4), 16);
+  const blue = parseInt(value.slice(4, 6), 16);
+  const channels = [red, green, blue].map((channel) => {
+    const normalized = channel / 255;
+    return normalized <= 0.03928 ? normalized / 12.92 : ((normalized + 0.055) / 1.055) ** 2.4;
+  });
+  const luminance = 0.2126 * channels[0] + 0.7152 * channels[1] + 0.0722 * channels[2];
+  return luminance > 0.48 ? "#181713" : "#ffffff";
+}
+
 function applyPathbarColor(color = pathbarColorFor()) {
   const nextColor = isHexColor(color) ? color : defaultPathbarColor;
   document.documentElement.style.setProperty("--pathbar-color", nextColor);
+  document.documentElement.style.setProperty("--user-bubble-color", nextColor);
+  document.documentElement.style.setProperty("--user-bubble-text", textColorForBackground(nextColor));
   if (pathbarColorPicker) pathbarColorPicker.value = nextColor;
 }
 
@@ -299,6 +331,7 @@ function savePathbarColorForCurrentWorkdir(color) {
   pathbarColorsByCwd[pathbarColorKeyFor()] = color;
   localStorage.setItem(pathbarColorStorageKey, JSON.stringify(pathbarColorsByCwd));
   applyPathbarColor(color);
+  renderOpenSessionList();
 }
 
 applyPathbarColor();
@@ -532,6 +565,7 @@ function switchToOpenSession(sessionKey) {
   persistOpenSessions();
   selectedThread = session.threadId || "";
   currentWorkdir = session.cwd || currentWorkdir;
+  applyPathbarColor();
   updateUrlThread();
   renderSessionChrome();
   connect();
@@ -567,7 +601,23 @@ function removeOpenSession(sessionKey) {
 
 function renderSessionChrome() {
   const index = activeSessionIndex();
-  if (sessionCountPill) sessionCountPill.textContent = openSessions.length ? `${Math.max(0, index) + 1}/${openSessions.length}` : "0/0";
+  const total = openSessions.length;
+  const current = total ? Math.max(0, index) + 1 : 0;
+  const hasPrev = total > 1 && current > 1;
+  const hasNext = total > 1 && current < total;
+  const label = total > 1 ? `${current}/${total} 稼働中` : total === 1 ? "1件のみ" : "稼働なし";
+  if (sessionCountPill) sessionCountPill.textContent = total ? `${current}/${total}` : "0/0";
+  if (sessionSwipeLabel) sessionSwipeLabel.textContent = label;
+  sessionSwipePrev?.classList.toggle("active", hasPrev);
+  sessionSwipeNext?.classList.toggle("active", hasNext);
+  sessionSwipeHint?.classList.toggle("has-prev", hasPrev);
+  sessionSwipeHint?.classList.toggle("has-next", hasNext);
+  sessionSwitcher?.setAttribute(
+    "aria-label",
+    total > 1
+      ? `稼働中スレッド ${current}/${total}。${hasPrev ? "右へスワイプで前へ。" : ""}${hasNext ? "左へスワイプで次へ。" : ""}タップで一覧を表示`
+      : "開いているセッションを表示",
+  );
   renderOpenSessionList();
 }
 
@@ -586,11 +636,22 @@ function renderOpenSessionList() {
     row.className = session.key === activeSessionKey ? "session-card-row active" : "session-card-row";
     const card = document.createElement("button");
     card.type = "button";
-    card.className = "session-card";
+    card.className = "session-card open-session-card";
+    const sessionColor = pathbarColorFor(session.cwd);
+    card.style.setProperty("--session-color", sessionColor);
+    card.style.setProperty("--session-color-text", textColorForBackground(sessionColor));
     card.innerHTML = `
-      <span class="session-card-title">${escapeHtml(session.title || basenameForPath(session.cwd))}</span>
-      <span class="session-card-path">${escapeHtml(displayPath(session.cwd) || "cwd未設定")}</span>
-      <span class="session-card-meta">${escapeHtml(session.status || "ready")} · ${escapeHtml(shortSessionPath(session.cwd))}</span>
+      <span class="session-color-chip" aria-hidden="true"></span>
+      <span class="session-card-column session-card-directory">
+        <span class="session-column-label">Directory</span>
+        <span class="session-directory-name">${escapeHtml(basenameForPath(session.cwd))}</span>
+        <span class="session-directory-fullpath">${escapeHtml(displayPath(session.cwd) || "cwd未設定")}</span>
+      </span>
+      <span class="session-card-column session-card-name">
+        <span class="session-column-label">Session</span>
+        <span class="session-card-title">${escapeHtml(session.title || basenameForPath(session.cwd))}</span>
+        <span class="session-card-meta">${escapeHtml(session.status || "ready")} · ${escapeHtml(shortSessionPath(session.cwd))}</span>
+      </span>
     `;
     const close = document.createElement("button");
     close.type = "button";
@@ -629,6 +690,7 @@ function restoreActiveSessionFromStorage() {
   activeSessionKey = saved.key;
   selectedThread = saved.threadId || "";
   currentWorkdir = saved.cwd || currentWorkdir;
+  applyPathbarColor();
   updateUrlThread();
   renderSessionChrome();
   return Boolean(selectedThread);
@@ -1168,6 +1230,7 @@ function updateStatusGroup(group) {
 }
 
 function addStatusGroupItem(text) {
+  const shouldStickToBottom = shouldAutoScrollLog();
   if (!statusGroup || statusGroup.items.length >= 12) {
     const el = document.createElement("article");
     el.className = "entry status status-group";
@@ -1199,7 +1262,7 @@ function addStatusGroupItem(text) {
   }
   statusGroup.items.push(text);
   updateStatusGroup(statusGroup);
-  log.scrollTop = log.scrollHeight;
+  scrollLogToBottomIfNeeded(shouldStickToBottom);
 }
 
 function addEntry(kind, text, images = []) {
@@ -1208,6 +1271,7 @@ function addEntry(kind, text, images = []) {
     return null;
   }
   if (kind === "user" && !String(text || "").trim() && !images.length) return null;
+  const shouldStickToBottom = shouldAutoScrollLog();
   statusGroup = null;
   const el = document.createElement("article");
   el.className = `entry ${kind}`;
@@ -1230,7 +1294,7 @@ function addEntry(kind, text, images = []) {
 
   el.append(avatar, body, tools);
   log.appendChild(el);
-  log.scrollTop = log.scrollHeight;
+  scrollLogToBottomIfNeeded(shouldStickToBottom);
   return body;
 }
 
@@ -2492,7 +2556,7 @@ function bindSessionSwipe() {
   const surface = document.querySelector(".mode-stage");
   if (!surface) return;
   let gesture = null;
-  let wheelGesture = { accumX: 0, lastWheelAt: 0, lastSwitchAt: 0 };
+  let wheelGesture = { accumX: 0, lastWheelAt: 0, lastSwitchAt: 0, switched: false };
   const touchActivatePx = 18;
   const touchDistanceRatio = 0.16;
   const touchVelocityPxPerMs = 0.32;
@@ -2550,17 +2614,20 @@ function bindSessionSwipe() {
     if (Math.abs(event.deltaX) < Math.abs(event.deltaY) * 1.1) return;
     event.preventDefault();
     const now = Date.now();
-    if (now - wheelGesture.lastWheelAt > wheelResetMs) wheelGesture.accumX = 0;
+    if (now - wheelGesture.lastWheelAt > wheelResetMs) {
+      wheelGesture = { accumX: 0, lastWheelAt: 0, lastSwitchAt: wheelGesture.lastSwitchAt, switched: false };
+    }
     wheelGesture.lastWheelAt = now;
     wheelGesture.accumX += event.deltaX;
+    if (wheelGesture.switched) return;
     if (now - wheelGesture.lastSwitchAt < wheelCooldownMs) return;
     const threshold = Math.max(
       wheelMinThresholdPx,
       Math.min(wheelMaxThresholdPx, surface.clientWidth * wheelThresholdRatio),
     );
     if (Math.abs(wheelGesture.accumX) < threshold) return;
-    switchOpenSessionByOffset(wheelGesture.accumX > 0 ? 1 : -1);
-    wheelGesture = { accumX: 0, lastWheelAt: now, lastSwitchAt: now };
+    const switched = switchOpenSessionByOffset(wheelGesture.accumX > 0 ? 1 : -1);
+    wheelGesture = { accumX: 0, lastWheelAt: now, lastSwitchAt: switched ? now : wheelGesture.lastSwitchAt, switched };
   }, { passive: false });
 }
 
@@ -2645,9 +2712,10 @@ function connect() {
     }
     if (msg.type === "assistantDelta") {
       setRunState("streaming");
+      const shouldStickToBottom = shouldAutoScrollLog();
       if (!assistantEntry) assistantEntry = addEntry("assistant", "");
       setEntryText(assistantEntry, "assistant", `${assistantEntry.markdownSource || ""}${msg.text}`);
-      log.scrollTop = log.scrollHeight;
+      scrollLogToBottomIfNeeded(shouldStickToBottom);
       return;
     }
     if (msg.type === "approval") {

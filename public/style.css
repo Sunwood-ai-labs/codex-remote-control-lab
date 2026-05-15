@@ -19,6 +19,8 @@
   --panel: #f6f6f1;
   --accent: #167c68;
   --pathbar-color: #4f8cff;
+  --user-bubble-color: #4f8cff;
+  --user-bubble-text: #ffffff;
   --button: #181713;
   --button-text: #ffffff;
   --nav-text: #26251f;
@@ -964,6 +966,46 @@ body[data-main-mode="terminal"] .titlebar-mode-glyph-terminal {
   min-width: 0;
 }
 
+.session-swipe-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 760;
+  line-height: 1;
+  letter-spacing: 0.01em;
+}
+
+.session-swipe-arrow,
+.session-swipe-label {
+  display: inline-flex;
+  align-items: center;
+  min-height: 17px;
+  border: 1px solid color-mix(in srgb, var(--line) 76%, transparent);
+  border-radius: 999px;
+  padding: 0 7px;
+  background: color-mix(in srgb, var(--surface-raised) 72%, transparent);
+  white-space: nowrap;
+}
+
+.session-swipe-arrow {
+  opacity: 0.32;
+}
+
+.session-swipe-arrow.active {
+  opacity: 1;
+  color: color-mix(in srgb, var(--accent) 86%, var(--text));
+  border-color: color-mix(in srgb, var(--accent) 42%, var(--line));
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+.session-swipe-label {
+  color: var(--nav-text);
+  background: color-mix(in srgb, var(--card) 86%, transparent);
+}
+
 .title-status {
   display: flex;
   align-items: center;
@@ -1571,10 +1613,119 @@ p {
   align-items: stretch;
 }
 
+.open-session-card {
+  --session-color: var(--accent);
+  --session-color-text: var(--button-text);
+  grid-template-columns: 10px minmax(0, 1fr);
+  grid-template-rows: auto auto;
+  align-items: stretch;
+  border-color: color-mix(in srgb, var(--session-color) 42%, var(--line));
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--session-color) 11%, var(--field)), var(--field) 58%),
+    var(--field);
+}
+
+.session-color-chip {
+  grid-row: 1 / -1;
+  align-self: stretch;
+  border-radius: 999px;
+  background: var(--session-color);
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, #ffffff 44%, transparent),
+    0 0 0 1px color-mix(in srgb, var(--session-color) 52%, var(--line));
+}
+
+.session-card-column {
+  display: grid;
+  align-content: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.open-session-card .session-card-directory,
+.open-session-card .session-card-name {
+  grid-column: 2;
+}
+
+.open-session-card .session-card-directory {
+  padding-bottom: 8px;
+  border-bottom: 1px solid color-mix(in srgb, var(--session-color) 18%, var(--line));
+}
+
+.open-session-card .session-card-name {
+  padding-top: 8px;
+}
+
+.session-column-label {
+  color: color-mix(in srgb, var(--session-color) 74%, var(--muted));
+  font-size: 10px;
+  font-weight: 850;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.open-session-card .session-card-title,
+.open-session-card .session-card-path,
+.open-session-card .session-card-meta,
+.open-session-card .session-directory-name,
+.open-session-card .session-directory-fullpath {
+  display: block;
+  min-width: 0;
+}
+
+.open-session-card .session-card-title {
+  white-space: nowrap;
+  overflow-wrap: normal;
+}
+
+.open-session-card .session-directory-name {
+  overflow: hidden;
+  color: var(--text);
+  font-size: 16px;
+  font-weight: 850;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.open-session-card .session-directory-fullpath {
+  overflow-x: auto;
+  overflow-y: hidden;
+  color: var(--muted);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  font-size: 11px;
+  line-height: 1.3;
+  text-overflow: clip;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  -webkit-overflow-scrolling: touch;
+}
+
+.open-session-card .session-card-name .session-card-title,
+.open-session-card .session-card-name .session-card-meta {
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
+  text-overflow: clip;
+  white-space: nowrap;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+}
+
 .session-card.active,
 .session-card-row.active .session-card {
   border-color: color-mix(in srgb, var(--accent) 52%, var(--line));
   background: color-mix(in srgb, var(--accent) 9%, var(--field));
+}
+
+.session-card-row.active .open-session-card {
+  border-color: color-mix(in srgb, var(--session-color) 68%, var(--line));
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--session-color) 18%, var(--field)), color-mix(in srgb, var(--session-color) 8%, var(--field)) 64%),
+    var(--field);
+  box-shadow:
+    0 9px 22px color-mix(in srgb, var(--session-color) 17%, transparent),
+    inset 0 1px 0 color-mix(in srgb, #ffffff 34%, transparent);
 }
 
 .session-folder-card {
@@ -2407,7 +2558,13 @@ body[data-main-mode="terminal"] .terminal-mode {
   border: 0;
   border-radius: 14px;
   padding: 11px 15px;
-  background: color-mix(in srgb, var(--soft) 82%, var(--card));
+  color: var(--user-bubble-text);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, #ffffff 16%, transparent), color-mix(in srgb, #000000 7%, transparent)),
+    var(--user-bubble-color);
+  box-shadow:
+    0 10px 28px color-mix(in srgb, var(--user-bubble-color) 22%, transparent),
+    inset 0 1px 0 color-mix(in srgb, #ffffff 24%, transparent);
 }
 
 .entry-body {
@@ -3889,7 +4046,7 @@ textarea::placeholder {
     content: "あなた";
     display: block;
     margin-bottom: 6px;
-    color: color-mix(in srgb, var(--accent) 68%, var(--nav-text));
+    color: color-mix(in srgb, var(--user-bubble-text) 78%, transparent);
     font-size: 11px;
     font-weight: 700;
     line-height: 1.2;
@@ -4079,6 +4236,25 @@ textarea::placeholder {
 
   h1 {
     font-size: 13px;
+  }
+
+  .session-swipe-hint {
+    gap: 3px;
+    margin-top: 2px;
+    max-width: 100%;
+    overflow: hidden;
+    font-size: 9px;
+  }
+
+  .session-swipe-arrow,
+  .session-swipe-label {
+    min-height: 16px;
+    padding: 0 5px;
+  }
+
+  .session-swipe-label {
+    min-width: 48px;
+    justify-content: center;
   }
 
   .header-cwd {
